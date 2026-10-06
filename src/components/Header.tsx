@@ -31,6 +31,8 @@ interface HeaderProps {
   onOpenMembersModal: () => void;
   onOpenRegularPaymentsModal: () => void;
   onOpenAiAssistantModal: () => void;
+  onOpenInstallModal: () => void;
+  isAppInstalled?: boolean;
   notifications: AppNotification[];
   onDismissNotification: (id: string) => void;
   onDismissAllNotifications: () => void;
@@ -49,6 +51,8 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenMembersModal,
   onOpenRegularPaymentsModal,
   onOpenAiAssistantModal,
+  onOpenInstallModal,
+  isAppInstalled,
   notifications,
   onDismissNotification,
   onDismissAllNotifications,
@@ -153,6 +157,18 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* Right Actions Toolbar */}
         <div className="flex items-center gap-1.5 sm:gap-2.5">
+          {/* Install / Add to Desktop Button */}
+          {!isAppInstalled && (
+            <button
+              onClick={onOpenInstallModal}
+              className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-2 bg-indigo-50 hover:bg-indigo-100/80 text-indigo-700 rounded-xl text-xs font-bold transition-all border border-indigo-200/60"
+              title="Добавить сайт на рабочий стол телефона или ПК"
+            >
+              <Download className="w-4 h-4 text-indigo-600" />
+              <span className="hidden lg:inline">На рабочий стол</span>
+            </button>
+          )}
+
           {/* AI Advisor Button */}
           <button
             onClick={onOpenAiAssistantModal}
@@ -219,6 +235,17 @@ export const Header: React.FC<HeaderProps> = ({
                 >
                   <Users className="w-4 h-4 text-violet-600" />
                   <span>Члены семьи</span>
+                </button>
+
+                <button
+                  onClick={() => {
+                    setIsMenuOpen(false);
+                    onOpenInstallModal();
+                  }}
+                  className="w-full flex items-center gap-2.5 px-4 py-2 text-indigo-700 hover:bg-indigo-50/60 font-semibold"
+                >
+                  <Download className="w-4 h-4 text-indigo-600" />
+                  <span>На рабочий стол (PWA)</span>
                 </button>
 
                 <div className="my-1 border-t border-slate-100" />

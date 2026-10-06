@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Plus, Sparkles, AlertTriangle, ShieldCheck } from 'lucide-react';
+import { Plus, Sparkles, AlertTriangle, ShieldCheck, Download } from 'lucide-react';
 import {
   CategoryBudgets,
   RegularPayment,
@@ -41,6 +41,8 @@ import { RegularPaymentsModal } from './components/RegularPaymentsModal';
 import { ManageMembersModal } from './components/ManageMembersModal';
 import { AiAssistantModal } from './components/AiAssistantModal';
 import { AuthorBadge } from './components/AuthorBadge';
+import { InstallAppModal } from './components/InstallAppModal';
+import { usePWAInstall } from './hooks/usePWAInstall';
 
 export default function App() {
   // Current selected month (YYYY-MM)
@@ -60,6 +62,10 @@ export default function App() {
   const [isMembersModalOpen, setIsMembersModalOpen] = useState(false);
   const [isRegularPaymentsModalOpen, setIsRegularPaymentsModalOpen] = useState(false);
   const [isAiAssistantModalOpen, setIsAiAssistantModalOpen] = useState(false);
+  const [isInstallModalOpen, setIsInstallModalOpen] = useState(false);
+
+  // PWA Install capability
+  const { isInstallable, isInstalled, isIOS, install } = usePWAInstall();
 
   // Pre-fill states for TransactionModal
   const [txInitialData, setTxInitialData] = useState<{
@@ -281,6 +287,8 @@ export default function App() {
         onOpenMembersModal={() => setIsMembersModalOpen(true)}
         onOpenRegularPaymentsModal={() => setIsRegularPaymentsModalOpen(true)}
         onOpenAiAssistantModal={() => setIsAiAssistantModalOpen(true)}
+        onOpenInstallModal={() => setIsInstallModalOpen(true)}
+        isAppInstalled={isInstalled}
         notifications={activeNotifications}
         onDismissNotification={handleDismissNotification}
         onDismissAllNotifications={handleDismissAllNotifications}
@@ -420,6 +428,30 @@ export default function App() {
                 Спросить
               </button>
             </div>
+            {/* Install / Add to Desktop Card */}
+            {!isInstalled && (
+              <div className="p-4 rounded-2xl bg-white border border-slate-200/90 shadow-2xs flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
+                    <Download className="w-4 h-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <h4 className="text-xs font-bold text-slate-900 leading-tight truncate">
+                      Установить на рабочий стол
+                    </h4>
+                    <p className="text-[11px] text-slate-500 mt-0.5 truncate">
+                      Быстрый запуск на телефоне или ПК
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setIsInstallModalOpen(true)}
+                  className="px-3 py-1.5 text-xs font-bold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-xl transition-colors shrink-0"
+                >
+                  Добавить
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </main>
@@ -439,6 +471,13 @@ export default function App() {
       <AuthorBadge />
 
       {/* Modals */}
+      <InstallAppModal
+        isOpen={isInstallModalOpen}
+        onClose={() => setIsInstallModalOpen(false)}
+        isInstallable={isInstallable}
+        isIOS={isIOS}
+        onInstall={install}
+      />
       <TransactionModal
         isOpen={isTxModalOpen}
         onClose={() => {
