@@ -1,0 +1,6 @@
+{
+  "name": "Семейный кошелёк",
+  "description": "Удобный учет семейных доходов и расходов с фильтрацией по месяцам, аналитикой по членам семьи и категориям.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
