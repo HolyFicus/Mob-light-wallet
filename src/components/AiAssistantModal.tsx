@@ -13,6 +13,7 @@ import {
   AlertTriangle,
 } from 'lucide-react';
 import { CategoryBudgets, RegularPayment, Transaction } from '../types';
+import { generateLocalFinancialAnalysis } from '../utils/aiAdvisor';
 
 interface AiAssistantModalProps {
   isOpen: boolean;
@@ -133,21 +134,18 @@ export const AiAssistantModal: React.FC<AiAssistantModalProps> = ({
       });
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || `Ошибка сервера: ${response.status}`);
+        // Fallback for static environments (GitHub Pages, etc.)
+        const localReply = generateLocalFinancialAnalysis(financialContext, textToSend);
+        setMessages((prev) => [...prev, { role: 'assistant', content: localReply }]);
+        return;
       }
 
       const data = await response.json();
       setMessages((prev) => [...prev, { role: 'assistant', content: data.reply }]);
     } catch (err: any) {
-      console.error(err);
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: 'assistant',
-          content: `Извините, возникла ошибка при обращении к нейросети: ${err.message}. Пожалуйста, убедитесь, что сервер запущен.`,
-        },
-      ]);
+      console.warn('Network or static environment detected, using client analysis:', err);
+      const localReply = generateLocalFinancialAnalysis(financialContext, textToSend);
+      setMessages((prev) => [...prev, { role: 'assistant', content: localReply }]);
     } finally {
       setIsLoading(false);
     }
