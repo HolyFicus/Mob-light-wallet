@@ -40,6 +40,7 @@ import { BudgetModal } from './components/BudgetModal';
 import { RegularPaymentsModal } from './components/RegularPaymentsModal';
 import { ManageMembersModal } from './components/ManageMembersModal';
 import { AiAssistantModal } from './components/AiAssistantModal';
+import { AuthorBadge } from './components/AuthorBadge';
 
 export default function App() {
   // Current selected month (YYYY-MM)
@@ -424,15 +425,18 @@ export default function App() {
       </main>
 
       {/* Mobile Floating Action Button */}
-      <div className="sm:hidden fixed bottom-5 right-5 z-20">
+      <div className="sm:hidden fixed bottom-14 right-4 z-20">
         <button
           onClick={() => handleOpenAdd('expense')}
-          className="w-14 h-14 rounded-full bg-slate-900 text-white shadow-xl flex items-center justify-center active:scale-95 transition-transform"
+          className="w-13 h-13 rounded-full bg-slate-900 text-white shadow-xl flex items-center justify-center active:scale-95 transition-transform"
           aria-label="Добавить операцию"
         >
           <Plus className="w-6 h-6" />
         </button>
       </div>
+
+      {/* Author Badge in bottom right corner */}
+      <AuthorBadge />
 
       {/* Modals */}
       <TransactionModal
