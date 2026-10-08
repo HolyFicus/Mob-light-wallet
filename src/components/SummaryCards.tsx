@@ -19,6 +19,7 @@ interface SummaryCardsProps {
   totalDeposits?: number;
   totalMonthlyInterest?: number;
   onOpenDepositsModal?: () => void;
+  periodLabel?: string;
 }
 
 export const SummaryCards: React.FC<SummaryCardsProps> = ({
@@ -30,6 +31,7 @@ export const SummaryCards: React.FC<SummaryCardsProps> = ({
   totalDeposits = 0,
   totalMonthlyInterest = 0,
   onOpenDepositsModal,
+  periodLabel = 'месяца',
 }) => {
   const isPositiveBalance = balance >= 0;
   const savingsRate =
@@ -41,7 +43,7 @@ export const SummaryCards: React.FC<SummaryCardsProps> = ({
       <div className="bg-white rounded-2xl border border-slate-200/80 p-4 sm:p-5 shadow-2xs relative overflow-hidden flex flex-col justify-between">
         <div className="flex items-center justify-between mb-2">
           <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-            Баланс месяца
+            Баланс ({periodLabel})
           </span>
           <div
             className={`w-8 h-8 rounded-xl flex items-center justify-center ${

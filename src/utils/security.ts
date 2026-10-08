@@ -1,4 +1,4 @@
-import { Transaction, Deposit, RegularPayment, CategoryBudgets, TransactionType } from '../types';
+import { Transaction, Deposit, RegularPayment, CategoryBudgets, TransactionType, CategoryItem } from '../types';
 
 /**
  * Strips leading spreadsheet formula triggers (=, +, -, @, \t, \r, %, |) to prevent
@@ -90,6 +90,7 @@ export function sanitizeTransaction(raw: any): Transaction | null {
   const category = sanitizeString(raw.category, 60, 'Прочее');
   if (!category) return null;
 
+  const subcategory = raw.subcategory ? sanitizeString(raw.subcategory, 60, '') : undefined;
   const date = sanitizeDate(raw.date);
   const comment = sanitizeString(raw.comment, 300, '');
   const id = sanitizeString(raw.id, 64, `tx-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`);
@@ -100,10 +101,65 @@ export function sanitizeTransaction(raw: any): Transaction | null {
     type,
     amount,
     category,
+    ...(subcategory ? { subcategory } : {}),
     date,
     comment,
     createdAt,
   };
+}
+
+/**
+ * Validates and sanitizes a single CategoryItem.
+ */
+export function sanitizeCategoryItem(raw: any, fallbackType: TransactionType = 'expense'): CategoryItem | null {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+
+  const name = sanitizeString(raw.name, 60, '');
+  if (!name) return null;
+
+  const type: TransactionType = raw.type === 'income' ? 'income' : fallbackType;
+  const icon = sanitizeString(raw.icon, 50, type === 'income' ? 'Coins' : 'Tag');
+  const color = sanitizeString(raw.color, 30, type === 'income' ? '#059669' : '#10b981');
+  const id = sanitizeString(raw.id, 64, `cat-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`);
+
+  let subcategories: string[] | undefined = undefined;
+  if (Array.isArray(raw.subcategories)) {
+    const subs: string[] = raw.subcategories
+      .map((s: unknown) => sanitizeString(s, 60, ''))
+      .filter((s: string): s is string => s.length > 0);
+    subcategories = Array.from(new Set<string>(subs)).slice(0, 50);
+  }
+
+  return {
+    id,
+    name,
+    type,
+    icon,
+    color,
+    ...(subcategories && subcategories.length > 0 ? { subcategories } : {}),
+  };
+}
+
+/**
+ * Validates an array of CategoryItems.
+ */
+export function sanitizeCategoriesList(raw: any, defaultType: TransactionType = 'expense'): CategoryItem[] {
+  if (!Array.isArray(raw)) return [];
+  const items = raw
+    .map((item) => sanitizeCategoryItem(item, defaultType))
+    .filter((c: CategoryItem | null): c is CategoryItem => c !== null);
+
+  // Eliminate duplicate category names preserving the first occurrence
+  const seen = new Set<string>();
+  const uniqueItems: CategoryItem[] = [];
+  for (const item of items) {
+    const lower = item.name.toLowerCase();
+    if (!seen.has(lower)) {
+      seen.add(lower);
+      uniqueItems.push(item);
+    }
+  }
+  return uniqueItems;
 }
 
 /**

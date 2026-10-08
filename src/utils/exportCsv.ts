@@ -11,7 +11,7 @@ export function exportTransactionsToCsv(
 ): boolean {
   // Semicolon is standard for Russian/European Excel locale
   const delimiter = ';';
-  const headers = ['Дата', 'Тип', 'Категория', 'Сумма', 'Комментарий'];
+  const headers = ['Дата', 'Тип', 'Категория', 'Подкатегория', 'Сумма', 'Комментарий'];
 
   // Sort by date descending (latest first)
   const sorted = [...(transactions || [])].sort((a, b) => {
@@ -25,6 +25,7 @@ export function exportTransactionsToCsv(
     sanitizeCsvCell(tx.date, false),
     sanitizeCsvCell(tx.type === 'expense' ? 'Расход' : 'Доход', false),
     sanitizeCsvCell(tx.category, false),
+    sanitizeCsvCell(tx.subcategory || '', false),
     sanitizeCsvCell(tx.amount, true),
     sanitizeCsvCell(tx.comment || '', false),
   ]);

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Target, Check, AlertCircle } from 'lucide-react';
+import { X, Target, Check, AlertCircle, Settings2 } from 'lucide-react';
 import { CategoryBudgets, CategoryItem } from '../types';
 import { formatCurrency } from '../utils/formatters';
 import { CategoryIcon } from './CategoryIcon';
@@ -10,6 +10,7 @@ interface BudgetModalProps {
   categories: CategoryItem[];
   budgets: CategoryBudgets;
   onSaveBudgets: (newBudgets: CategoryBudgets) => void;
+  onOpenCategoriesModal?: () => void;
 }
 
 export const BudgetModal: React.FC<BudgetModalProps> = ({
@@ -18,6 +19,7 @@ export const BudgetModal: React.FC<BudgetModalProps> = ({
   categories,
   budgets,
   onSaveBudgets,
+  onOpenCategoriesModal,
 }) => {
   const expenseCategories = categories.filter((c) => c.type === 'expense');
 
@@ -82,6 +84,23 @@ export const BudgetModal: React.FC<BudgetModalProps> = ({
             <span className="text-base font-bold text-slate-900">
               {formatCurrency(totalMonthlyBudget)}
             </span>
+          </div>
+
+          <div className="flex items-center justify-between pt-1">
+            <span className="text-xs font-semibold text-slate-700">Лимиты по категориям</span>
+            {onOpenCategoriesModal && (
+              <button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  onOpenCategoriesModal();
+                }}
+                className="inline-flex items-center gap-1 text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 transition-colors"
+              >
+                <Settings2 className="w-3 h-3" />
+                <span>Настроить категории</span>
+              </button>
+            )}
           </div>
 
           <div className="space-y-3">

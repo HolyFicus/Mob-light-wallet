@@ -20,6 +20,26 @@ import {
   Percent,
   PiggyBank,
   Landmark,
+  BookOpen,
+  Gamepad2,
+  Baby,
+  Shirt,
+  Sparkles,
+  Wrench,
+  Dumbbell,
+  Music,
+  GraduationCap,
+  Fuel,
+  Bus,
+  Smile,
+  Shield,
+  Folder,
+  CreditCard,
+  TrendingUp,
+  Wallet,
+  PawPrint,
+  Wifi,
+  Sparkle,
 } from 'lucide-react';
 
 interface CategoryIconProps {
@@ -48,7 +68,82 @@ const ICON_MAP: Record<string, React.ElementType> = {
   Percent,
   PiggyBank,
   Landmark,
+  BookOpen,
+  Gamepad2,
+  Baby,
+  Shirt,
+  Sparkles,
+  Wrench,
+  Dumbbell,
+  Music,
+  GraduationCap,
+  Fuel,
+  Bus,
+  Smile,
+  Shield,
+  Folder,
+  CreditCard,
+  TrendingUp,
+  Wallet,
+  PawPrint,
+  Wifi,
+  Sparkle,
 };
+
+export const AVAILABLE_CATEGORY_ICONS = [
+  { name: 'ShoppingBag', label: 'Покупки' },
+  { name: 'Utensils', label: 'Еда и кафе' },
+  { name: 'Car', label: 'Автомобиль' },
+  { name: 'Fuel', label: 'Бензин' },
+  { name: 'Bus', label: 'Транспорт' },
+  { name: 'Home', label: 'Дом' },
+  { name: 'Film', label: 'Развлечения' },
+  { name: 'HeartPulse', label: 'Здоровье' },
+  { name: 'Dumbbell', label: 'Спорт' },
+  { name: 'PiggyBank', label: 'Накопления' },
+  { name: 'Landmark', label: 'Банк и вклады' },
+  { name: 'Briefcase', label: 'Работа' },
+  { name: 'Award', label: 'Премия' },
+  { name: 'Laptop', label: 'Техника и фриланс' },
+  { name: 'Gift', label: 'Подарки' },
+  { name: 'Coins', label: 'Монеты' },
+  { name: 'DollarSign', label: 'Деньги' },
+  { name: 'CreditCard', label: 'Карта' },
+  { name: 'Coffee', label: 'Кофе' },
+  { name: 'Smartphone', label: 'Связь и гаджеты' },
+  { name: 'Wifi', label: 'Интернет' },
+  { name: 'Plane', label: 'Путешествия' },
+  { name: 'BookOpen', label: 'Книги' },
+  { name: 'GraduationCap', label: 'Обучение' },
+  { name: 'Baby', label: 'Дети' },
+  { name: 'PawPrint', label: 'Питомцы' },
+  { name: 'Shirt', label: 'Одежда' },
+  { name: 'Gamepad2', label: 'Игры' },
+  { name: 'Music', label: 'Музыка' },
+  { name: 'Wrench', label: 'Ремонт' },
+  { name: 'Sparkles', label: 'Красота' },
+  { name: 'Shield', label: 'Страховка' },
+  { name: 'Tag', label: 'Тег' },
+];
+
+export const AVAILABLE_CATEGORY_COLORS = [
+  '#10b981', // emerald
+  '#059669', // teal green
+  '#0284c7', // sky
+  '#2563eb', // blue
+  '#6366f1', // indigo
+  '#8b5cf6', // violet
+  '#a855f7', // purple
+  '#ec4899', // pink
+  '#f43f5e', // rose
+  '#ef4444', // red
+  '#f59e0b', // amber
+  '#d97706', // warm amber
+  '#ea580c', // orange
+  '#0d9488', // teal
+  '#06b6d4', // cyan
+  '#64748b', // slate
+];
 
 export const CategoryIcon: React.FC<CategoryIconProps> = ({ name, className = 'w-4 h-4', size }) => {
   const IconComponent = ICON_MAP[name] || HelpCircle;

@@ -18,6 +18,9 @@ import {
   Transaction,
   TransactionType,
   Deposit,
+  CategoryItem,
+  ViewPeriod,
+  RecordedMonthInfo,
 } from './types';
 import {
   DEFAULT_EXPENSE_CATEGORIES,
@@ -25,6 +28,7 @@ import {
 } from './data/defaultData';
 import {
   getCurrentYearMonth,
+  getMonthLabel,
   getDaysInMonth,
   formatCurrency,
   pluralizeRu,
@@ -38,6 +42,8 @@ import {
   saveRegularPayments,
   loadDeposits,
   saveDeposits,
+  loadCategories,
+  saveCategories,
   resetAllToDefaults,
   clearAllData,
 } from './utils/storage';
@@ -51,6 +57,7 @@ import {
   sanitizeDeposit,
   sanitizeRegularPayment,
   sanitizeCategoryBudgets,
+  sanitizeCategoriesList,
 } from './utils/security';
 
 import { Header } from './components/Header';
@@ -60,6 +67,7 @@ import { TransactionList } from './components/TransactionList';
 import { TransactionModal } from './components/TransactionModal';
 import { BudgetModal } from './components/BudgetModal';
 import { RegularPaymentsModal } from './components/RegularPaymentsModal';
+import { CategoriesModal } from './components/CategoriesModal';
 import { AiAssistantModal } from './components/AiAssistantModal';
 import { AuthorBadge } from './components/AuthorBadge';
 import { InstallAppModal } from './components/InstallAppModal';
@@ -70,16 +78,27 @@ export default function App() {
   // Current selected month (YYYY-MM)
   const [currentYearMonth, setCurrentYearMonth] = useState<string>(() => getCurrentYearMonth());
 
+  // Period view mode: 'month' | 'all' | 'custom'
+  const [viewPeriod, setViewPeriod] = useState<ViewPeriod>('month');
+  const [customRangeStart, setCustomRangeStart] = useState<string>('');
+  const [customRangeEnd, setCustomRangeEnd] = useState<string>('');
+
   // Persistent States
   const [transactions, setTransactions] = useState<Transaction[]>(() => loadTransactions());
   const [budgets, setBudgets] = useState<CategoryBudgets>(() => loadBudgets());
   const [regularPayments, setRegularPayments] = useState<RegularPayment[]>(() => loadRegularPayments());
   const [deposits, setDeposits] = useState<Deposit[]>(() => loadDeposits());
+  const [categoriesState, setCategoriesState] = useState<{
+    expense: CategoryItem[];
+    income: CategoryItem[];
+  }>(() => loadCategories());
 
   // Modals visibility
   const [isTxModalOpen, setIsTxModalOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [isBudgetModalOpen, setIsBudgetModalOpen] = useState(false);
+  const [isCategoriesModalOpen, setIsCategoriesModalOpen] = useState(false);
+  const [categoriesModalInitialType, setCategoriesModalInitialType] = useState<TransactionType>('expense');
   const [isRegularPaymentsModalOpen, setIsRegularPaymentsModalOpen] = useState(false);
   const [isDepositsModalOpen, setIsDepositsModalOpen] = useState(false);
   const [isAiAssistantModalOpen, setIsAiAssistantModalOpen] = useState(false);
@@ -115,6 +134,7 @@ export default function App() {
     type?: TransactionType;
     amount?: number;
     category?: string;
+    subcategory?: string;
     comment?: string;
     date?: string;
   }>({});
@@ -132,22 +152,167 @@ export default function App() {
     saveRegularPayments(regularPayments);
   }, [regularPayments]);
 
+  useEffect(() => {
+    saveCategories(categoriesState.expense, categoriesState.income);
+  }, [categoriesState]);
+
   // Combined categories list
   const allCategories = useMemo(() => {
-    return [...DEFAULT_EXPENSE_CATEGORIES, ...DEFAULT_INCOME_CATEGORIES];
-  }, []);
+    return [...categoriesState.expense, ...categoriesState.income];
+  }, [categoriesState]);
 
-  // Filter transactions for current month
+  // Category and Subcategory Management Handlers
+  const handleSaveCategory = (updatedCat: CategoryItem, oldName?: string) => {
+    setCategoriesState((prev) => {
+      const isExp = updatedCat.type === 'expense';
+      const targetList = isExp ? prev.expense : prev.income;
+      let newList: CategoryItem[];
+      if (targetList.some((c) => c.id === updatedCat.id)) {
+        newList = targetList.map((c) => (c.id === updatedCat.id ? updatedCat : c));
+      } else {
+        newList = [...targetList, updatedCat];
+      }
+      const newExpense = isExp ? newList : prev.expense;
+      const newIncome = isExp ? prev.income : newList;
+      saveCategories(newExpense, newIncome);
+      return { expense: newExpense, income: newIncome };
+    });
+
+    // Cascading updates when a category is renamed
+    if (oldName && oldName !== updatedCat.name) {
+      setTransactions((prev) =>
+        prev.map((t) => (t.category === oldName ? { ...t, category: updatedCat.name } : t))
+      );
+
+      setBudgets((prev) => {
+        if (prev[oldName] !== undefined) {
+          const updated = { ...prev };
+          updated[updatedCat.name] = updated[oldName];
+          delete updated[oldName];
+          return updated;
+        }
+        return prev;
+      });
+
+      setRegularPayments((prev) =>
+        prev.map((p) => (p.category === oldName ? { ...p, category: updatedCat.name } : p))
+      );
+
+      showToast(`Категория переименована в «${updatedCat.name}» во всех операциях`, 'success');
+    } else {
+      showToast(`Категория «${updatedCat.name}» сохранена`, 'success');
+    }
+  };
+
+  const handleDeleteCategory = (catToDelete: CategoryItem) => {
+    setCategoriesState((prev) => {
+      const newExpense = prev.expense.filter((c) => c.id !== catToDelete.id);
+      const newIncome = prev.income.filter((c) => c.id !== catToDelete.id);
+      saveCategories(newExpense, newIncome);
+      return { expense: newExpense, income: newIncome };
+    });
+
+    // Migrate operations with this category to 'Прочее'
+    setTransactions((prev) =>
+      prev.map((t) => (t.category === catToDelete.name ? { ...t, category: 'Прочее' } : t))
+    );
+
+    // Remove from budgets if exists
+    setBudgets((prev) => {
+      if (prev[catToDelete.name] !== undefined) {
+        const copy = { ...prev };
+        delete copy[catToDelete.name];
+        return copy;
+      }
+      return prev;
+    });
+
+    // Update regular payments
+    setRegularPayments((prev) =>
+      prev.map((p) => (p.category === catToDelete.name ? { ...p, category: 'Прочее' } : p))
+    );
+
+    showToast(`Категория «${catToDelete.name}» удалена`, 'info');
+  };
+
+  const handleQuickAddSubcategory = (catName: string, newSub: string) => {
+    setCategoriesState((prev) => {
+      const updateList = (list: CategoryItem[]) =>
+        list.map((c) => {
+          if (c.name === catName) {
+            const subs = c.subcategories || [];
+            if (!subs.includes(newSub)) {
+              return { ...c, subcategories: [...subs, newSub] };
+            }
+          }
+          return c;
+        });
+
+      const newExpense = updateList(prev.expense);
+      const newIncome = updateList(prev.income);
+      saveCategories(newExpense, newIncome);
+      return { expense: newExpense, income: newIncome };
+    });
+    showToast(`Подкатегория «${newSub}» добавлена в «${catName}»`, 'success');
+  };
+
+  // Filter transactions for current month (used for monthly budget panel)
   const monthTransactions = useMemo(() => {
     return transactions.filter((tx) => tx.date.startsWith(currentYearMonth));
   }, [transactions, currentYearMonth]);
 
-  // Monthly summary calculations
-  const monthlyStats = useMemo(() => {
+  // All months in which user has recorded transactions
+  const recordedMonths = useMemo<RecordedMonthInfo[]>(() => {
+    const monthMap = new Map<string, { count: number; expense: number; income: number }>();
+    const realYM = getCurrentYearMonth();
+    if (!monthMap.has(realYM)) {
+      monthMap.set(realYM, { count: 0, expense: 0, income: 0 });
+    }
+    if (!monthMap.has(currentYearMonth)) {
+      monthMap.set(currentYearMonth, { count: 0, expense: 0, income: 0 });
+    }
+
+    transactions.forEach((tx) => {
+      const ym = tx.date.slice(0, 7);
+      const curr = monthMap.get(ym) || { count: 0, expense: 0, income: 0 };
+      curr.count += 1;
+      if (tx.type === 'expense') curr.expense += tx.amount;
+      else curr.income += tx.amount;
+      monthMap.set(ym, curr);
+    });
+
+    return Array.from(monthMap.entries())
+      .map(([ym, data]) => ({
+        yearMonth: ym,
+        label: getMonthLabel(ym),
+        count: data.count,
+        expense: data.expense,
+        income: data.income,
+      }))
+      .sort((a, b) => b.yearMonth.localeCompare(a.yearMonth));
+  }, [transactions, currentYearMonth]);
+
+  // Active transactions according to viewPeriod
+  const activeTransactions = useMemo(() => {
+    if (viewPeriod === 'all') {
+      return transactions;
+    }
+    if (viewPeriod === 'custom') {
+      return transactions.filter((tx) => {
+        if (customRangeStart && tx.date < customRangeStart) return false;
+        if (customRangeEnd && tx.date > customRangeEnd) return false;
+        return true;
+      });
+    }
+    return monthTransactions;
+  }, [transactions, viewPeriod, monthTransactions, customRangeStart, customRangeEnd]);
+
+  // Summary calculations for the active view period
+  const activeStats = useMemo(() => {
     let totalIncome = 0;
     let totalExpense = 0;
 
-    monthTransactions.forEach((tx) => {
+    activeTransactions.forEach((tx) => {
       if (tx.type === 'expense') {
         totalExpense += tx.amount;
       } else {
@@ -156,17 +321,29 @@ export default function App() {
     });
 
     const balance = totalIncome - totalExpense;
-    const daysInMonth = getDaysInMonth(currentYearMonth);
-    const avgExpensePerDay = Math.round(totalExpense / (daysInMonth || 30));
+    const days = viewPeriod === 'month' ? getDaysInMonth(currentYearMonth) : 30;
+    const avgExpensePerDay = Math.round(totalExpense / (days || 30));
 
     return {
       totalIncome,
       totalExpense,
       balance,
-      transactionCount: monthTransactions.length,
+      transactionCount: activeTransactions.length,
       avgExpensePerDay,
     };
-  }, [monthTransactions, currentYearMonth]);
+  }, [activeTransactions, viewPeriod, currentYearMonth]);
+
+  // Period label for summary cards
+  const periodLabel = useMemo(() => {
+    if (viewPeriod === 'all') return 'за всё время';
+    if (viewPeriod === 'custom') {
+      if (customRangeStart && customRangeEnd) {
+        return `с ${customRangeStart} по ${customRangeEnd}`;
+      }
+      return 'за период';
+    }
+    return `за ${getMonthLabel(currentYearMonth)}`;
+  }, [viewPeriod, currentYearMonth, customRangeStart, customRangeEnd]);
 
   // Handlers for transactions
   const handleSaveTransaction = (
@@ -174,16 +351,34 @@ export default function App() {
     existingId?: string
   ) => {
     if (existingId) {
-      setTransactions((prev) =>
-        prev.map((t) => (t.id === existingId ? { ...t, ...txData } : t))
-      );
+      setTransactions((prev) => {
+        const next = prev.map((t) => (t.id === existingId ? { ...t, ...txData } : t));
+        saveTransactions(next);
+        return next;
+      });
+      showToast('Операция обновлена и надежно сохранена', 'success');
     } else {
       const newTx: Transaction = {
         ...txData,
         id: `tx-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
         createdAt: Date.now(),
       };
-      setTransactions((prev) => [newTx, ...prev]);
+      setTransactions((prev) => {
+        const next = [newTx, ...prev];
+        saveTransactions(next);
+        return next;
+      });
+
+      const txYearMonth = newTx.date.slice(0, 7);
+      if (viewPeriod === 'month' && txYearMonth !== currentYearMonth) {
+        setCurrentYearMonth(txYearMonth);
+        showToast(
+          `Операция на сумму ${formatCurrency(txData.amount)} сохранена. Открыт месяц ${getMonthLabel(txYearMonth)}.`,
+          'success'
+        );
+      } else {
+        showToast(`Операция на сумму ${formatCurrency(txData.amount)} сохранена`, 'success');
+      }
     }
   };
 
@@ -200,10 +395,11 @@ export default function App() {
   const handleOpenAdd = (
     type: TransactionType = 'expense',
     category?: string,
-    date?: string
+    date?: string,
+    subcategory?: string
   ) => {
     setEditingTransaction(null);
-    setTxInitialData({ type, category, date });
+    setTxInitialData({ type, category, date, subcategory });
     setIsTxModalOpen(true);
   };
 
@@ -295,6 +491,7 @@ export default function App() {
       budgets,
       regularPayments,
       deposits,
+      categories: categoriesState,
       exportedAt: new Date().toISOString(),
     };
     const blob = new Blob([JSON.stringify(exportObject, null, 2)], {
@@ -383,6 +580,18 @@ export default function App() {
           importedDepCount = validDeposits.length;
         }
 
+        // 7. Validate and sanitize custom categories if included
+        if (parsed.categories && typeof parsed.categories === 'object') {
+          const impExp = sanitizeCategoriesList(parsed.categories.expense, 'expense');
+          const impInc = sanitizeCategoriesList(parsed.categories.income, 'income');
+          if (impExp.length > 0 || impInc.length > 0) {
+            const finalExp = impExp.length > 0 ? impExp : categoriesState.expense;
+            const finalInc = impInc.length > 0 ? impInc : categoriesState.income;
+            setCategoriesState({ expense: finalExp, income: finalInc });
+            saveCategories(finalExp, finalInc);
+          }
+        }
+
         showToast(
           `Данные успешно импортированы: ${importedTxCount} ${pluralizeRu(importedTxCount, 'операция', 'операции', 'операций')}, ${importedDepCount} ${pluralizeRu(importedDepCount, 'вклад', 'вклада', 'вкладов')}`,
           'success'
@@ -403,6 +612,7 @@ export default function App() {
     setBudgets(loadBudgets());
     setRegularPayments(loadRegularPayments());
     setDeposits(loadDeposits());
+    setCategoriesState(loadCategories());
     showToast('Данные сброшены к начальным значениям', 'info');
   };
 
@@ -412,6 +622,7 @@ export default function App() {
     setBudgets({});
     setRegularPayments([]);
     setDeposits([]);
+    setCategoriesState(loadCategories());
     showToast('Все данные кошелька успешно очищены', 'success');
   };
 
@@ -421,8 +632,16 @@ export default function App() {
       <Header
         currentYearMonth={currentYearMonth}
         onMonthChange={setCurrentYearMonth}
+        viewPeriod={viewPeriod}
+        onPeriodChange={setViewPeriod}
+        recordedMonths={recordedMonths}
+        totalAllTransactionsCount={transactions.length}
         onOpenAddModal={() => handleOpenAdd('expense')}
         onOpenBudgetModal={() => setIsBudgetModalOpen(true)}
+        onOpenCategoriesModal={() => {
+          setCategoriesModalInitialType('expense');
+          setIsCategoriesModalOpen(true);
+        }}
         onOpenRegularPaymentsModal={() => setIsRegularPaymentsModalOpen(true)}
         onOpenDepositsModal={() => setIsDepositsModalOpen(true)}
         onOpenAiAssistantModal={() => setIsAiAssistantModalOpen(true)}
@@ -440,13 +659,14 @@ export default function App() {
       <main className="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 py-5 sm:py-6 space-y-6">
         {/* Summary Metric Cards (Итоги: Доходы, Расходы, Баланс, Вклады) */}
         <SummaryCards
-          totalIncome={monthlyStats.totalIncome}
-          totalExpense={monthlyStats.totalExpense}
-          balance={monthlyStats.balance}
-          transactionCount={monthlyStats.transactionCount}
-          avgExpensePerDay={monthlyStats.avgExpensePerDay}
+          totalIncome={activeStats.totalIncome}
+          totalExpense={activeStats.totalExpense}
+          balance={activeStats.balance}
+          transactionCount={activeStats.transactionCount}
+          avgExpensePerDay={activeStats.avgExpensePerDay}
           totalDeposits={totalDeposits}
           totalMonthlyInterest={totalMonthlyInterest}
+          periodLabel={periodLabel}
           onOpenDepositsModal={() => setIsDepositsModalOpen(true)}
         />
 
@@ -457,10 +677,16 @@ export default function App() {
             <div className="flex items-center justify-between">
               <div>
                 <h2 className="text-base font-bold text-slate-900 leading-tight">
-                  Операции за месяц
+                  {viewPeriod === 'all'
+                    ? 'История операций за всё время'
+                    : viewPeriod === 'custom'
+                    ? 'Операции за выбранный период'
+                    : 'Операции за месяц'}
                 </h2>
                 <p className="text-xs text-slate-500">
-                  Все доходы и расходы семьи с поиском и фильтрацией
+                  {viewPeriod === 'all'
+                    ? `Всего ${transactions.length} сохраненных операций в кошельке`
+                    : 'Все доходы и расходы семьи с поиском, историей и фильтрацией'}
                 </p>
               </div>
 
@@ -493,9 +719,20 @@ export default function App() {
             </div>
 
             <TransactionList
-              transactions={monthTransactions}
+              transactions={activeTransactions}
+              allTransactions={transactions}
               categories={allCategories}
               currentYearMonth={currentYearMonth}
+              viewPeriod={viewPeriod}
+              onPeriodChange={setViewPeriod}
+              onMonthChange={setCurrentYearMonth}
+              recordedMonths={recordedMonths}
+              customRangeStart={customRangeStart}
+              customRangeEnd={customRangeEnd}
+              onCustomRangeChange={(s, e) => {
+                setCustomRangeStart(s);
+                setCustomRangeEnd(e);
+              }}
               onEdit={handleEditTransaction}
               onDelete={handleDeleteTransaction}
               onOpenAddModal={(initialDate?: string) =>
@@ -508,7 +745,7 @@ export default function App() {
           <div className="lg:col-span-5 space-y-5">
             {/* Category Budget Progress Panel */}
             <BudgetProgressPanel
-              categories={DEFAULT_EXPENSE_CATEGORIES}
+              categories={categoriesState.expense}
               budgets={budgets}
               transactions={monthTransactions}
               yearMonth={currentYearMonth}
@@ -696,27 +933,47 @@ export default function App() {
         }}
         categories={allCategories}
         onSave={handleSaveTransaction}
+        onOpenCategoriesModal={() => {
+          setCategoriesModalInitialType(txInitialData.type || 'expense');
+          setIsCategoriesModalOpen(true);
+        }}
+        onQuickAddSubcategory={handleQuickAddSubcategory}
         editingTransaction={editingTransaction}
         initialType={txInitialData.type}
         initialAmount={txInitialData.amount}
         initialCategory={txInitialData.category}
+        initialSubcategory={txInitialData.subcategory}
         initialComment={txInitialData.comment}
         initialDate={txInitialData.date}
+      />
+
+      <CategoriesModal
+        isOpen={isCategoriesModalOpen}
+        onClose={() => setIsCategoriesModalOpen(false)}
+        expenseCategories={categoriesState.expense}
+        incomeCategories={categoriesState.income}
+        onSaveCategory={handleSaveCategory}
+        onDeleteCategory={handleDeleteCategory}
+        initialType={categoriesModalInitialType}
       />
 
       <BudgetModal
         isOpen={isBudgetModalOpen}
         onClose={() => setIsBudgetModalOpen(false)}
-        categories={DEFAULT_EXPENSE_CATEGORIES}
+        categories={categoriesState.expense}
         budgets={budgets}
         onSaveBudgets={setBudgets}
+        onOpenCategoriesModal={() => {
+          setCategoriesModalInitialType('expense');
+          setIsCategoriesModalOpen(true);
+        }}
       />
 
       <RegularPaymentsModal
         isOpen={isRegularPaymentsModalOpen}
         onClose={() => setIsRegularPaymentsModalOpen(false)}
         payments={regularPayments}
-        categories={DEFAULT_EXPENSE_CATEGORIES}
+        categories={categoriesState.expense}
         onSavePayments={setRegularPayments}
         onPayNow={handlePayBillQuick}
       />

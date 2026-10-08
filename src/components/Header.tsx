@@ -16,19 +16,29 @@ import {
   Landmark,
   FileSpreadsheet,
   AlertCircle,
+  Tag,
+  History,
+  ChevronDown,
+  CalendarRange,
 } from 'lucide-react';
 import {
   getCurrentYearMonth,
   getMonthLabel,
   shiftMonth,
+  pluralizeRu,
 } from '../utils/formatters';
-import { RegularPayment } from '../types';
+import { RegularPayment, ViewPeriod, RecordedMonthInfo } from '../types';
 
 interface HeaderProps {
   currentYearMonth: string;
   onMonthChange: (newYM: string) => void;
+  viewPeriod?: ViewPeriod;
+  onPeriodChange?: (newPeriod: ViewPeriod) => void;
+  recordedMonths?: RecordedMonthInfo[];
+  totalAllTransactionsCount?: number;
   onOpenAddModal: () => void;
   onOpenBudgetModal: () => void;
+  onOpenCategoriesModal: () => void;
   onOpenRegularPaymentsModal: () => void;
   onOpenDepositsModal: () => void;
   onOpenAiAssistantModal: () => void;
@@ -45,8 +55,13 @@ interface HeaderProps {
 export const Header: React.FC<HeaderProps> = ({
   currentYearMonth,
   onMonthChange,
+  viewPeriod = 'month',
+  onPeriodChange,
+  recordedMonths = [],
+  totalAllTransactionsCount = 0,
   onOpenAddModal,
   onOpenBudgetModal,
+  onOpenCategoriesModal,
   onOpenRegularPaymentsModal,
   onOpenDepositsModal,
   onOpenAiAssistantModal,
@@ -60,8 +75,10 @@ export const Header: React.FC<HeaderProps> = ({
   onClearData,
 }) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isArchiveDropdownOpen, setIsArchiveDropdownOpen] = useState(false);
   const [isConfirmClearOpen, setIsConfirmClearOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const archiveDropdownRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const realCurrentYM = getCurrentYearMonth();
@@ -72,14 +89,17 @@ export const Header: React.FC<HeaderProps> = ({
       if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
         setIsMenuOpen(false);
       }
+      if (archiveDropdownRef.current && !archiveDropdownRef.current.contains(event.target as Node)) {
+        setIsArchiveDropdownOpen(false);
+      }
     }
-    if (isMenuOpen) {
+    if (isMenuOpen || isArchiveDropdownOpen) {
       document.addEventListener('mousedown', handleClickOutside);
     }
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, [isMenuOpen]);
+  }, [isMenuOpen, isArchiveDropdownOpen]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -107,47 +127,157 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
         </div>
 
-        {/* Month Filter Navigator (Center) */}
-        <div className="flex items-center gap-1 sm:gap-2 bg-slate-100/90 p-1 rounded-xl">
-          <button
-            onClick={() => onMonthChange(shiftMonth(currentYearMonth, -1))}
-            className="p-1 sm:p-1.5 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-white transition-colors"
-            title="Предыдущий месяц"
-            aria-label="Предыдущий месяц"
-          >
-            <ChevronLeft className="w-4 h-4" />
-          </button>
+        {/* Month Filter Navigator & History Switcher (Center) */}
+        <div className="flex items-center gap-1.5 sm:gap-2">
+          {viewPeriod === 'all' ? (
+            <div className="flex items-center gap-1.5 bg-indigo-50 border border-indigo-200/80 px-2.5 sm:px-3 py-1.5 rounded-xl shadow-2xs">
+              <History className="w-4 h-4 text-indigo-600 shrink-0" />
+              <div className="text-left">
+                <span className="text-xs sm:text-sm font-bold text-indigo-900 block leading-tight">
+                  За всё время
+                </span>
+                <span className="text-[10px] text-indigo-600 font-medium hidden sm:block">
+                  Все {totalAllTransactionsCount} {pluralizeRu(totalAllTransactionsCount, 'операция', 'операции', 'операций')}
+                </span>
+              </div>
+              <button
+                onClick={() => onPeriodChange?.('month')}
+                className="text-[11px] font-bold text-indigo-700 hover:text-indigo-900 bg-white hover:bg-indigo-100/60 px-2 sm:px-2.5 py-1 rounded-lg border border-indigo-200 transition-colors ml-1 cursor-pointer"
+                title="Переключиться на просмотр по месяцам"
+              >
+                По месяцам
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-1 sm:gap-2 bg-slate-100/90 p-1 rounded-xl">
+              <button
+                onClick={() => {
+                  onMonthChange(shiftMonth(currentYearMonth, -1));
+                  if (viewPeriod !== 'month') onPeriodChange?.('month');
+                }}
+                className="p-1 sm:p-1.5 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-white transition-colors cursor-pointer"
+                title="Предыдущий месяц"
+                aria-label="Предыдущий месяц"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
 
-          <div className="relative flex items-center justify-center">
-            <span className="text-xs sm:text-sm font-bold text-slate-800 px-2 sm:px-3 text-center whitespace-nowrap">
-              {getMonthLabel(currentYearMonth)}
-            </span>
-            <input
-              type="month"
-              value={currentYearMonth}
-              onChange={(e) => {
-                if (e.target.value) onMonthChange(e.target.value);
-              }}
-              className="absolute inset-0 opacity-0 cursor-pointer w-full"
-              title="Выбрать месяц"
-            />
-          </div>
+              {/* Month Dropdown / Picker */}
+              <div className="relative" ref={archiveDropdownRef}>
+                <button
+                  type="button"
+                  onClick={() => setIsArchiveDropdownOpen(!isArchiveDropdownOpen)}
+                  className="flex items-center gap-1 px-2 sm:px-3 py-1 text-xs sm:text-sm font-bold text-slate-800 hover:bg-white rounded-lg transition-colors cursor-pointer"
+                  title="Выбрать период или архив"
+                >
+                  <span>{getMonthLabel(currentYearMonth)}</span>
+                  <ChevronDown className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                </button>
 
-          <button
-            onClick={() => onMonthChange(shiftMonth(currentYearMonth, 1))}
-            className="p-1 sm:p-1.5 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-white transition-colors"
-            title="Следующий месяц"
-            aria-label="Следующий месяц"
-          >
-            <ChevronRight className="w-4 h-4" />
-          </button>
+                {/* Archive & Month Dropdown Menu */}
+                {isArchiveDropdownOpen && (
+                  <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 w-64 bg-white rounded-2xl shadow-xl border border-slate-200 py-2 z-50 text-left animate-in fade-in zoom-in-95 duration-150">
+                    <div className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400 border-b border-slate-100">
+                      Период просмотра
+                    </div>
 
-          {!isCurrentMonth && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onPeriodChange?.('all');
+                        setIsArchiveDropdownOpen(false);
+                      }}
+                      className="w-full flex items-center justify-between px-3.5 py-2.5 text-xs text-slate-700 hover:bg-indigo-50 hover:text-indigo-700 transition-colors cursor-pointer"
+                    >
+                      <div className="flex items-center gap-2">
+                        <History className="w-4 h-4 text-indigo-600 shrink-0" />
+                        <span className="font-bold">За всё время</span>
+                      </div>
+                      <span className="text-[11px] font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">
+                        {totalAllTransactionsCount} оп.
+                      </span>
+                    </button>
+
+                    <div className="px-3 pt-2 pb-1 text-[10px] font-bold uppercase tracking-wider text-slate-400 border-t border-slate-100">
+                      Сохраненные месяцы ({recordedMonths.length})
+                    </div>
+
+                    <div className="max-h-56 overflow-y-auto divide-y divide-slate-50">
+                      {recordedMonths.map((m) => {
+                        const isSelected = viewPeriod === 'month' && m.yearMonth === currentYearMonth;
+                        return (
+                          <button
+                            key={m.yearMonth}
+                            type="button"
+                            onClick={() => {
+                              onMonthChange(m.yearMonth);
+                              onPeriodChange?.('month');
+                              setIsArchiveDropdownOpen(false);
+                            }}
+                            className={`w-full flex items-center justify-between px-3.5 py-2 text-xs transition-colors cursor-pointer ${
+                              isSelected
+                                ? 'bg-indigo-50/80 text-indigo-900 font-bold'
+                                : 'text-slate-700 hover:bg-slate-50'
+                            }`}
+                          >
+                            <span className="truncate">{m.label}</span>
+                            <span
+                              className={`text-[11px] px-1.5 py-0.5 rounded-md font-medium shrink-0 ${
+                                m.count > 0
+                                  ? 'bg-slate-100 text-slate-700 font-semibold'
+                                  : 'text-slate-400'
+                              }`}
+                            >
+                              {m.count} оп.
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <button
+                onClick={() => {
+                  onMonthChange(shiftMonth(currentYearMonth, 1));
+                  if (viewPeriod !== 'month') onPeriodChange?.('month');
+                }}
+                className="p-1 sm:p-1.5 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-white transition-colors cursor-pointer"
+                title="Следующий месяц"
+                aria-label="Следующий месяц"
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
+
+              {!isCurrentMonth && (
+                <button
+                  onClick={() => {
+                    onMonthChange(realCurrentYM);
+                    if (viewPeriod !== 'month') onPeriodChange?.('month');
+                  }}
+                  className="hidden md:inline-flex text-[11px] font-semibold text-indigo-600 hover:text-indigo-700 bg-white px-2 py-1 rounded-md shadow-2xs ml-1 transition-colors cursor-pointer"
+                >
+                  Текущий
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Quick "All Time" Toggle Button in Header */}
+          {viewPeriod !== 'all' && (
             <button
-              onClick={() => onMonthChange(realCurrentYM)}
-              className="hidden md:inline-flex text-[11px] font-semibold text-indigo-600 hover:text-indigo-700 bg-white px-2 py-1 rounded-md shadow-2xs ml-1 transition-colors"
+              onClick={() => onPeriodChange?.('all')}
+              className="hidden lg:inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold text-slate-600 hover:text-indigo-700 bg-slate-100 hover:bg-indigo-50 rounded-xl transition-colors border border-transparent hover:border-indigo-200 cursor-pointer"
+              title="Показать все операции за всё время"
             >
-              Текущий
+              <History className="w-3.5 h-3.5 text-indigo-600" />
+              <span>Вся история</span>
+              {totalAllTransactionsCount > 0 && (
+                <span className="text-[10px] font-bold px-1.5 py-0.2 bg-white text-indigo-700 rounded-md border border-slate-200">
+                  {totalAllTransactionsCount}
+                </span>
+              )}
             </button>
           )}
         </div>
@@ -199,6 +329,17 @@ export const Header: React.FC<HeaderProps> = ({
 
             {isMenuOpen && (
               <div className="absolute right-0 mt-2 w-56 bg-white rounded-2xl shadow-xl border border-slate-200 py-1.5 z-50 text-xs animate-in fade-in zoom-in-95 duration-100">
+                <button
+                  onClick={() => {
+                    setIsMenuOpen(false);
+                    onOpenCategoriesModal();
+                  }}
+                  className="w-full flex items-center gap-2.5 px-4 py-2 text-indigo-700 hover:bg-indigo-50/60 font-semibold"
+                >
+                  <Tag className="w-4 h-4 text-indigo-600" />
+                  <span>Категории и подкатегории</span>
+                </button>
+
                 <button
                   onClick={() => {
                     setIsMenuOpen(false);

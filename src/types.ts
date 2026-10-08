@@ -5,6 +5,7 @@ export interface Transaction {
   type: TransactionType;
   amount: number;
   category: string;
+  subcategory?: string;
   date: string; // YYYY-MM-DD
   comment: string;
   createdAt: number;
@@ -16,6 +17,7 @@ export interface CategoryItem {
   type: TransactionType;
   icon: string;
   color: string;
+  subcategories?: string[];
 }
 
 // Category budgets mapped as { [categoryName]: budgetAmount }
@@ -62,4 +64,14 @@ export interface MonthlyStats {
   topExpenseCategory: { name: string; amount: number } | null;
   totalBudget: number;
   budgetUtilization: number;
+}
+
+export type ViewPeriod = 'month' | 'all' | 'custom';
+
+export interface RecordedMonthInfo {
+  yearMonth: string;
+  label: string;
+  count: number;
+  expense: number;
+  income: number;
 }
