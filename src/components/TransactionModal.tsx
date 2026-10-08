@@ -96,6 +96,11 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
       return;
     }
 
+    if (cleanAmount > 100_000_000_000) {
+      setError('Сумма превышает допустимый лимит (100 млрд ₽)');
+      return;
+    }
+
     if (!category) {
       setError('Выберите категорию');
       return;
@@ -110,9 +115,9 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
       {
         type,
         amount: Math.round(cleanAmount),
-        category,
-        date,
-        comment: comment.trim(),
+        category: category.trim().slice(0, 60),
+        date: date.trim(),
+        comment: comment.trim().slice(0, 300),
       },
       editingTransaction?.id
     );

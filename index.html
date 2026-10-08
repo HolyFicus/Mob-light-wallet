@@ -4,6 +4,11 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <script>
+      // Guarantee React Fast Refresh preamble is initialized before any module evaluation
+      window.$RefreshReg$ = window.$RefreshReg$ || function() {};
+      window.$RefreshSig$ = window.$RefreshSig$ || function() { return function(type) { return type; }; };
+      window.__vite_plugin_react_preamble_installed__ = true;
+
       // Gracefully ignore Vite WebSocket HMR errors in the preview environment
       window.addEventListener('unhandledrejection', function(event) {
         if (event.reason && (event.reason.message?.includes('WebSocket') || String(event.reason).includes('WebSocket'))) {

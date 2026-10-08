@@ -1,26 +1,9 @@
 import { Transaction } from '../types';
-
-/**
- * Escapes a cell value for standard CSV format.
- * Quotes if the value contains delimiter, double quotes, or newlines.
- */
-function escapeCsvCell(val: string | number): string {
-  const str = String(val ?? '');
-  if (
-    str.includes(';') ||
-    str.includes(',') ||
-    str.includes('"') ||
-    str.includes('\n') ||
-    str.includes('\r')
-  ) {
-    return `"${str.replace(/"/g, '""')}"`;
-  }
-  return str;
-}
+import { sanitizeCsvCell } from './security';
 
 /**
  * Exports transactions to a CSV file optimized for Excel (Cyrillic support via UTF-8 BOM)
- * and Google Sheets.
+ * and Google Sheets, hardened against CSV Formula Injection attacks.
  */
 export function exportTransactionsToCsv(
   transactions: Transaction[],
@@ -39,11 +22,11 @@ export function exportTransactionsToCsv(
   });
 
   const rows = sorted.map((tx) => [
-    escapeCsvCell(tx.date),
-    escapeCsvCell(tx.type === 'expense' ? 'Расход' : 'Доход'),
-    escapeCsvCell(tx.category),
-    escapeCsvCell(tx.amount),
-    escapeCsvCell(tx.comment || ''),
+    sanitizeCsvCell(tx.date, false),
+    sanitizeCsvCell(tx.type === 'expense' ? 'Расход' : 'Доход', false),
+    sanitizeCsvCell(tx.category, false),
+    sanitizeCsvCell(tx.amount, true),
+    sanitizeCsvCell(tx.comment || '', false),
   ]);
 
   const csvContent = [

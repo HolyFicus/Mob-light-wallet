@@ -46,6 +46,12 @@ import {
   calculateTotalMonthlyInterest,
 } from './utils/depositCalculations';
 import { exportTransactionsToCsv } from './utils/exportCsv';
+import {
+  sanitizeTransaction,
+  sanitizeDeposit,
+  sanitizeRegularPayment,
+  sanitizeCategoryBudgets,
+} from './utils/security';
 
 import { Header } from './components/Header';
 import { SummaryCards } from './components/SummaryCards';
@@ -88,6 +94,18 @@ export default function App() {
       setToast(null);
     }, 3500);
   };
+
+  // Listen for storage quota or write failure events
+  useEffect(() => {
+    const handleStorageError = (e: Event) => {
+      const customEvent = e as CustomEvent<{ action: string; message: string }>;
+      showToast(customEvent.detail?.message || 'Ошибка хранилища браузера', 'error');
+    };
+    window.addEventListener('family-wallet-storage-error', handleStorageError);
+    return () => {
+      window.removeEventListener('family-wallet-storage-error', handleStorageError);
+    };
+  }, []);
 
   // PWA Install capability
   const { isInstallable, isInstalled, isIOS, install } = usePWAInstall();
@@ -292,28 +310,89 @@ export default function App() {
   };
 
   const handleImportData = (file: File) => {
+    // 1. File extension validation
+    if (!file.name.toLowerCase().endsWith('.json')) {
+      showToast('Поддерживаются только файлы резервной копии .json', 'error');
+      return;
+    }
+
+    // 2. File size limit to protect against browser freeze / DoS (max 5 MB)
+    if (file.size > 5 * 1024 * 1024) {
+      showToast('Файл слишком велик (максимум 5 МБ)', 'error');
+      return;
+    }
+
     const reader = new FileReader();
     reader.onload = (e) => {
       try {
         const content = e.target?.result as string;
+        if (!content || typeof content !== 'string') {
+          showToast('Не удалось прочитать содержимое файла', 'error');
+          return;
+        }
+
         const parsed = JSON.parse(content);
+        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+          showToast('Некорректная структура файла резервной копии', 'error');
+          return;
+        }
+
+        let importedTxCount = 0;
+        let importedDepCount = 0;
+
+        // Protection against excessive memory consumption / browser lockup
+        const MAX_TRANSACTIONS = 20_000;
+        const MAX_ENTRIES = 200;
+
+        // 3. Validate and sanitize transactions
         if (Array.isArray(parsed.transactions)) {
-          setTransactions(parsed.transactions);
+          const rawList = parsed.transactions.slice(0, MAX_TRANSACTIONS);
+          const validTx = rawList
+            .map(sanitizeTransaction)
+            .filter((t: Transaction | null): t is Transaction => t !== null);
+          setTransactions(validTx);
+          saveTransactions(validTx);
+          importedTxCount = validTx.length;
         }
+
+        // 4. Validate and sanitize category budgets (immune to prototype pollution)
         if (parsed.budgets && typeof parsed.budgets === 'object') {
-          setBudgets(parsed.budgets);
+          const validBudgets = sanitizeCategoryBudgets(parsed.budgets);
+          setBudgets(validBudgets);
+          saveBudgets(validBudgets);
         }
+
+        // 5. Validate and sanitize regular payments
         if (Array.isArray(parsed.regularPayments)) {
-          setRegularPayments(parsed.regularPayments);
+          const rawPayments = parsed.regularPayments.slice(0, MAX_ENTRIES);
+          const validPayments = rawPayments
+            .map(sanitizeRegularPayment)
+            .filter((p: RegularPayment | null): p is RegularPayment => p !== null);
+          setRegularPayments(validPayments);
+          saveRegularPayments(validPayments);
         }
+
+        // 6. Validate and sanitize deposits
         if (Array.isArray(parsed.deposits)) {
-          setDeposits(parsed.deposits);
-          saveDeposits(parsed.deposits);
+          const rawDeposits = parsed.deposits.slice(0, MAX_ENTRIES);
+          const validDeposits = rawDeposits
+            .map(sanitizeDeposit)
+            .filter((d: Deposit | null): d is Deposit => d !== null);
+          setDeposits(validDeposits);
+          saveDeposits(validDeposits);
+          importedDepCount = validDeposits.length;
         }
-        showToast('Данные успешно импортированы!', 'success');
-      } catch (err) {
+
+        showToast(
+          `Данные успешно импортированы: ${importedTxCount} ${pluralizeRu(importedTxCount, 'операция', 'операции', 'операций')}, ${importedDepCount} ${pluralizeRu(importedDepCount, 'вклад', 'вклада', 'вкладов')}`,
+          'success'
+        );
+      } catch {
         showToast('Ошибка при чтении файла JSON. Проверьте формат файла.', 'error');
       }
+    };
+    reader.onerror = () => {
+      showToast('Ошибка чтения файла с диска', 'error');
     };
     reader.readAsText(file);
   };

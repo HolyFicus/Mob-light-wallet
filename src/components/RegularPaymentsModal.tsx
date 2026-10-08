@@ -40,21 +40,23 @@ export const RegularPaymentsModal: React.FC<RegularPaymentsModalProps> = ({
 
   const handleAddPayment = (e: React.FormEvent) => {
     e.preventDefault();
-    const amountNum = parseFloat(newAmount.replace(/\s/g, ''));
+    const cleanAmount = parseFloat(newAmount.replace(/\s/g, '').replace(',', '.'));
     const dayNum = parseInt(newDay, 10);
     const noticeNum = parseInt(newNoticeDays, 10) || 3;
 
-    if (!newTitle.trim() || isNaN(amountNum) || amountNum <= 0 || isNaN(dayNum)) {
+    if (!newTitle.trim() || isNaN(cleanAmount) || cleanAmount <= 0 || isNaN(dayNum)) {
       return;
     }
 
+    const boundedAmount = Math.min(100_000_000_000, Math.max(1, Math.round(cleanAmount)));
+
     const newPayment: RegularPayment = {
-      id: `bill-${Date.now()}`,
-      title: newTitle.trim(),
-      amount: amountNum,
+      id: `bill-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      title: newTitle.trim().slice(0, 100),
+      amount: boundedAmount,
       dayOfMonth: Math.max(1, Math.min(31, dayNum)),
-      category: newCategory,
-      autoPayNoticeDays: noticeNum,
+      category: (newCategory || 'Жильё').slice(0, 60),
+      autoPayNoticeDays: Math.max(1, Math.min(30, noticeNum)),
     };
 
     onSavePayments([...payments, newPayment]);

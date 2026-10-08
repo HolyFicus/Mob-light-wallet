@@ -33,7 +33,7 @@ export const BudgetModal: React.FC<BudgetModalProps> = ({
 
   const handleInputChange = (categoryName: string, value: string) => {
     const cleanNum = value.replace(/\D/g, '');
-    const num = cleanNum === '' ? 0 : parseInt(cleanNum, 10);
+    const num = cleanNum === '' ? 0 : Math.min(100_000_000_000, parseInt(cleanNum, 10));
     setFormBudgets((prev) => ({
       ...prev,
       [categoryName]: num,

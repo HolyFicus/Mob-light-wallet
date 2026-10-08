@@ -9,6 +9,12 @@ import {
   DEFAULT_REGULAR_PAYMENTS,
   DEFAULT_DEPOSITS,
 } from '../data/defaultData';
+import {
+  sanitizeTransaction,
+  sanitizeDeposit,
+  sanitizeRegularPayment,
+  sanitizeCategoryBudgets,
+} from './security';
 
 const KEYS = {
   CLEAN_INITIALIZED: 'family_wallet_init_clean_v3',
@@ -19,6 +25,7 @@ const KEYS = {
 };
 
 // Ensure old demo data from previous versions is completely wiped
+// Crucial: NEVER overwrite existing user data if it already exists in localStorage
 function ensureCleanInitialization(): void {
   try {
     if (!localStorage.getItem(KEYS.CLEAN_INITIALIZED)) {
@@ -30,15 +37,46 @@ function ensureCleanInitialization(): void {
         'family_wallet_dismissed_notifs_v2',
         'family_wallet_members_v3',
         'family_wallet_dismissed_notifs_v3',
-      ].forEach((key) => localStorage.removeItem(key));
+      ].forEach((key) => {
+        try {
+          localStorage.removeItem(key);
+        } catch {
+          // ignore
+        }
+      });
 
-      localStorage.setItem(KEYS.TRANSACTIONS, JSON.stringify([]));
-      localStorage.setItem(KEYS.BUDGETS, JSON.stringify({}));
-      localStorage.setItem(KEYS.REGULAR_PAYMENTS, JSON.stringify([]));
+      // Only initialize empty containers if user has no existing records saved
+      if (localStorage.getItem(KEYS.TRANSACTIONS) === null) {
+        localStorage.setItem(KEYS.TRANSACTIONS, JSON.stringify([]));
+      }
+      if (localStorage.getItem(KEYS.BUDGETS) === null) {
+        localStorage.setItem(KEYS.BUDGETS, JSON.stringify({}));
+      }
+      if (localStorage.getItem(KEYS.REGULAR_PAYMENTS) === null) {
+        localStorage.setItem(KEYS.REGULAR_PAYMENTS, JSON.stringify([]));
+      }
       localStorage.setItem(KEYS.CLEAN_INITIALIZED, 'true');
     }
   } catch (err) {
     console.error('Storage initialization error', err);
+  }
+}
+
+// Helper to notify application if browser storage quota is exceeded
+function notifyStorageError(action: string, error: unknown): void {
+  console.error(`Storage error during ${action}:`, error);
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(
+      new CustomEvent('family-wallet-storage-error', {
+        detail: {
+          action,
+          message:
+            error instanceof Error && error.name === 'QuotaExceededError'
+              ? 'Память браузера переполнена! Сохраните резервную копию на диск.'
+              : 'Ошибка сохранения в хранилище браузера.',
+        },
+      })
+    );
   }
 }
 
@@ -53,18 +91,28 @@ export function loadTransactions(): Transaction[] {
       return [];
     }
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .map(sanitizeTransaction)
+      .filter((t: Transaction | null): t is Transaction => t !== null);
   } catch (err) {
     console.error('Error loading transactions from localStorage', err);
     return [];
   }
 }
 
-export function saveTransactions(transactions: Transaction[]): void {
+export function saveTransactions(transactions: Transaction[]): boolean {
   try {
-    localStorage.setItem(KEYS.TRANSACTIONS, JSON.stringify(transactions));
+    const sanitized = Array.isArray(transactions)
+      ? transactions
+          .map(sanitizeTransaction)
+          .filter((t: Transaction | null): t is Transaction => t !== null)
+      : [];
+    localStorage.setItem(KEYS.TRANSACTIONS, JSON.stringify(sanitized));
+    return true;
   } catch (err) {
-    console.error('Error saving transactions to localStorage', err);
+    notifyStorageError('сохранение операций', err);
+    return false;
   }
 }
 
@@ -76,17 +124,20 @@ export function loadBudgets(): CategoryBudgets {
       return DEFAULT_BUDGETS;
     }
     const parsed = JSON.parse(raw);
-    return typeof parsed === 'object' && parsed !== null ? parsed : DEFAULT_BUDGETS;
+    return sanitizeCategoryBudgets(parsed);
   } catch {
     return DEFAULT_BUDGETS;
   }
 }
 
-export function saveBudgets(budgets: CategoryBudgets): void {
+export function saveBudgets(budgets: CategoryBudgets): boolean {
   try {
-    localStorage.setItem(KEYS.BUDGETS, JSON.stringify(budgets));
+    const sanitized = sanitizeCategoryBudgets(budgets);
+    localStorage.setItem(KEYS.BUDGETS, JSON.stringify(sanitized));
+    return true;
   } catch (err) {
-    console.error('Error saving budgets to localStorage', err);
+    notifyStorageError('сохранение бюджетов', err);
+    return false;
   }
 }
 
@@ -98,17 +149,27 @@ export function loadRegularPayments(): RegularPayment[] {
       return DEFAULT_REGULAR_PAYMENTS;
     }
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : DEFAULT_REGULAR_PAYMENTS;
+    if (!Array.isArray(parsed)) return DEFAULT_REGULAR_PAYMENTS;
+    return parsed
+      .map(sanitizeRegularPayment)
+      .filter((p: RegularPayment | null): p is RegularPayment => p !== null);
   } catch {
     return DEFAULT_REGULAR_PAYMENTS;
   }
 }
 
-export function saveRegularPayments(payments: RegularPayment[]): void {
+export function saveRegularPayments(payments: RegularPayment[]): boolean {
   try {
-    localStorage.setItem(KEYS.REGULAR_PAYMENTS, JSON.stringify(payments));
+    const sanitized = Array.isArray(payments)
+      ? payments
+          .map(sanitizeRegularPayment)
+          .filter((p: RegularPayment | null): p is RegularPayment => p !== null)
+      : [];
+    localStorage.setItem(KEYS.REGULAR_PAYMENTS, JSON.stringify(sanitized));
+    return true;
   } catch (err) {
-    console.error('Error saving regular payments to localStorage', err);
+    notifyStorageError('сохранение регулярных платежей', err);
+    return false;
   }
 }
 
@@ -120,17 +181,27 @@ export function loadDeposits(): Deposit[] {
       return DEFAULT_DEPOSITS;
     }
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : DEFAULT_DEPOSITS;
+    if (!Array.isArray(parsed)) return DEFAULT_DEPOSITS;
+    return parsed
+      .map(sanitizeDeposit)
+      .filter((d: Deposit | null): d is Deposit => d !== null);
   } catch {
     return DEFAULT_DEPOSITS;
   }
 }
 
-export function saveDeposits(deposits: Deposit[]): void {
+export function saveDeposits(deposits: Deposit[]): boolean {
   try {
-    localStorage.setItem(KEYS.DEPOSITS, JSON.stringify(deposits));
+    const sanitized = Array.isArray(deposits)
+      ? deposits
+          .map(sanitizeDeposit)
+          .filter((d: Deposit | null): d is Deposit => d !== null)
+      : [];
+    localStorage.setItem(KEYS.DEPOSITS, JSON.stringify(sanitized));
+    return true;
   } catch (err) {
-    console.error('Error saving deposits to localStorage', err);
+    notifyStorageError('сохранение вкладов', err);
+    return false;
   }
 }
 

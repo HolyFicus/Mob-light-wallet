@@ -122,8 +122,9 @@ export const DepositsModal: React.FC<DepositsModalProps> = ({
   const handleSaveRate = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!rateEditDeposit) return;
-    const cleanRate = parseFloat(newRateInput.replace(',', '.')) || 0;
-    if (cleanRate <= 0) return;
+    const rawRate = parseFloat(newRateInput.replace(',', '.')) || 0;
+    if (rawRate <= 0) return;
+    const cleanRate = Math.min(1000, Number(rawRate.toFixed(2)));
 
     const updated = deposits.map((d) =>
       d.id === rateEditDeposit.id ? { ...d, interestRate: cleanRate } : d
@@ -173,8 +174,10 @@ export const DepositsModal: React.FC<DepositsModalProps> = ({
 
   const handleSaveForm = (e: React.FormEvent) => {
     e.preventDefault();
-    const cleanAmount = parseFloat(formAmount.replace(/\s/g, '')) || 0;
-    const cleanRate = parseFloat(formRate.replace(',', '.')) || 0;
+    const rawAmount = parseFloat(formAmount.replace(/\s/g, '')) || 0;
+    const cleanAmount = Math.min(100_000_000_000, Math.max(0, Math.round(rawAmount)));
+    const rawRate = parseFloat(formRate.replace(',', '.')) || 0;
+    const cleanRate = Math.min(1000, Math.max(0, Number(rawRate.toFixed(2))));
     const cleanDay = Math.min(31, Math.max(1, parseInt(formDayOfMonth, 10) || 1));
 
     if (!formName.trim()) return;
@@ -184,12 +187,12 @@ export const DepositsModal: React.FC<DepositsModalProps> = ({
         d.id === editingDepositId
           ? {
               ...d,
-              name: formName.trim(),
+              name: formName.trim().slice(0, 100),
               amount: cleanAmount,
               interestRate: cleanRate,
               interestPayout: formPayout,
               dayOfMonth: cleanDay,
-              notes: formNotes.trim(),
+              notes: formNotes.trim().slice(0, 500),
             }
           : d
       );
@@ -198,12 +201,12 @@ export const DepositsModal: React.FC<DepositsModalProps> = ({
     } else {
       const newDeposit: Deposit = {
         id: `dep-${Date.now()}`,
-        name: formName.trim(),
+        name: formName.trim().slice(0, 100),
         amount: cleanAmount,
         interestRate: cleanRate,
         interestPayout: formPayout,
         dayOfMonth: cleanDay,
-        notes: formNotes.trim(),
+        notes: formNotes.trim().slice(0, 500),
         createdAt: Date.now(),
       };
       onSaveDeposits([...deposits, newDeposit]);
@@ -217,7 +220,8 @@ export const DepositsModal: React.FC<DepositsModalProps> = ({
   // Top Up Action
   const handleConfirmTopUp = () => {
     if (!topUpDeposit) return;
-    const addVal = parseFloat(topUpAmount.replace(/\s/g, '')) || 0;
+    const rawVal = parseFloat(topUpAmount.replace(/\s/g, '')) || 0;
+    const addVal = Math.min(100_000_000_000, Math.max(0, Math.round(rawVal)));
     if (addVal <= 0) return;
 
     const updated = deposits.map((d) =>
