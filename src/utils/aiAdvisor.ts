@@ -4,19 +4,23 @@ export interface FinancialContext {
   totalExpense: number;
   balance: number;
   categoryAnalysis?: Record<string, any>;
-  memberSpending?: Record<string, { expense: number; income: number }>;
   regularPayments?: Array<{
     title: string;
     amount: number;
     dayOfMonth: number;
     category: string;
-    member: string;
+  }>;
+  deposits?: Array<{
+    name: string;
+    amount: number;
+    interestRate: number;
+    monthlyInterest: number;
+    interestPayout: string;
   }>;
   recentTransactions?: Array<{
     type: string;
     amount: number;
     category: string;
-    member: string;
     comment: string;
     date: string;
   }>;
@@ -35,9 +39,12 @@ export function generateLocalFinancialAnalysis(
     totalExpense,
     balance,
     categoryAnalysis,
-    memberSpending,
     regularPayments,
+    deposits,
   } = context;
+
+  const depositsSum = (deposits || []).reduce((s, d) => s + (d.amount || 0), 0);
+  const monthlyInterestSum = (deposits || []).reduce((s, d) => s + (d.monthlyInterest || 0), 0);
   const savingsRate =
     totalIncome > 0
       ? Math.round(((totalIncome - totalExpense) / totalIncome) * 100)
@@ -60,22 +67,21 @@ export function generateLocalFinancialAnalysis(
     });
   }
 
-  let topSpender = '';
-  let maxSpend = 0;
-  if (memberSpending) {
-    Object.entries(memberSpending).forEach(([member, data]: [string, any]) => {
-      if (data.expense > maxSpend) {
-        maxSpend = data.expense;
-        topSpender = member;
-      }
-    });
-  }
-
   const pLower = prompt.toLowerCase();
 
   // Custom prompt matching
+  if (pLower.includes('вклад') || pLower.includes('процент') || pLower.includes('накоп')) {
+    return `### 🏦 Анализ вкладов и пассивного дохода
+
+• **Сумма на вкладах:** ${depositsSum.toLocaleString('ru-RU')} ₽
+• **Ожидаемый пассивный доход:** +${monthlyInterestSum.toLocaleString('ru-RU')} ₽ / месяц (+${(monthlyInterestSum * 12).toLocaleString('ru-RU')} ₽ / год)
+${deposits && deposits.length > 0 ? `• **Ваши вклады:**\n${deposits.map(d => `  - **${d.name}**: ${d.amount.toLocaleString('ru-RU')} ₽ под ${d.interestRate}% годовых (+${d.monthlyInterest.toLocaleString('ru-RU')} ₽/мес)`).join('\n')}` : '• У вас пока нет открытых вкладов. Откройте вклад в разделе «Вклады и проценты», чтобы получать пассивный доход!'}
+
+💡 **Совет**: Регулярное пополнение вклада в день зарплаты и капитализация процентов ускоряют рост капитала.`;
+  }
+
   if (pLower.includes('сэконом') || pLower.includes('оптимиз')) {
-    return `### 💡 Советы по оптимизации семейного бюджета
+    return `### 💡 Советы по оптимизации бюджета
 
 1. **Контроль лимитов**:
 ${
@@ -85,41 +91,23 @@ ${
 }
 
 2. **Правило 50/30/20**:
-Постарайтесь направлять до 50% дохода на обязательные нужды (жильё, продукты, регулярные счета), 30% на личные траты и развлечения, а 20% — откладывать в резервный фонд. Сейчас ваша норма сбережений составляет **${savingsRate}%**.
+Постарайтесь направлять до 50% дохода на обязательные нужды (жильё, продукты, регулярные счета), 30% на личные траты и развлечения, а 20% — откладывать на вклады и накопительные счета. Сейчас ваша норма сбережений составляет **${savingsRate}%**.
 
 3. **Регулярные платежи**:
 Запланировано регулярных обязательств на сумму ${(regularPayments || []).reduce((acc, b) => acc + b.amount, 0).toLocaleString('ru-RU')} ₽. Проверьте подписки и тарифы связи — часто смена пакета экономит 10-15% в год.`;
   }
 
-  if (pLower.includes('кто') || pLower.includes('член') || pLower.includes('семь')) {
-    const membersSummary = memberSpending
-      ? Object.entries(memberSpending)
-          .map(
-            ([m, d]) =>
-              `• **${m}**: расходы **${d.expense.toLocaleString('ru-RU')} ₽**${d.income > 0 ? `, доходы +${d.income.toLocaleString('ru-RU')} ₽` : ''}`
-          )
-          .join('\n')
-      : 'Информация отсутствует.';
-
-    return `### 👥 Анализ трат по членам семьи
-
-${membersSummary}
-
-${
-  topSpender
-    ? `Больше всего расходов зафиксировано у **${topSpender}** (${maxSpend.toLocaleString('ru-RU')} ₽).`
-    : ''
-}
-
-Обсуждайте крупные покупки совместно, чтобы поддерживать семейную финансовую гармонию!`;
-  }
-
-  return `### 📊 Анализ семейного кошелька
+  return `### 📊 Анализ финансов за месяц
 
 **Финансовый итог месяца:**
 • **Доходы:** +${(totalIncome || 0).toLocaleString('ru-RU')} ₽
 • **Расходы:** -${(totalExpense || 0).toLocaleString('ru-RU')} ₽
 • **Текущий баланс:** ${(balance || 0).toLocaleString('ru-RU')} ₽ (норма сбережений: **${savingsRate}%**)
+${
+  depositsSum > 0
+    ? `• **Вклады и накопления:** ${depositsSum.toLocaleString('ru-RU')} ₽ (пассивный доход: +${monthlyInterestSum.toLocaleString('ru-RU')} ₽ / мес)\n`
+    : ''
+}
 
 ${
   overBudgetCats.length > 0
@@ -131,11 +119,10 @@ ${
     ? `**Внимание к категориям (близко к лимиту):**\n${nearBudgetCats.join('\n')}\n`
     : ''
 }
-${topSpender ? `**Члены семьи:** Основная доля расходов у **${topSpender}** (${maxSpend.toLocaleString('ru-RU')} ₽).\n` : ''}
 **💡 Рекомендация:**
 ${
   balance > 0
-    ? 'Положительный баланс позволяет сформировать семейную подушку безопасности на 3–6 месяцев обязательных расходов.'
+    ? 'Положительный баланс позволяет регулярно пополнять вклады и сформировать финансовую подушку безопасности на 3–6 месяцев обязательных расходов.'
     : 'Расходы превышают доходы или баланс нулевой — пересмотрите необязательные статьи трат.'
 }`;
 }

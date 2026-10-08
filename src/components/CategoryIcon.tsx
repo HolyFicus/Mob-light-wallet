@@ -17,6 +17,9 @@ import {
   Utensils,
   Plane,
   HelpCircle,
+  Percent,
+  PiggyBank,
+  Landmark,
 } from 'lucide-react';
 
 interface CategoryIconProps {
@@ -42,6 +45,9 @@ const ICON_MAP: Record<string, React.ElementType> = {
   Smartphone,
   Utensils,
   Plane,
+  Percent,
+  PiggyBank,
+  Landmark,
 };
 
 export const CategoryIcon: React.FC<CategoryIconProps> = ({ name, className = 'w-4 h-4', size }) => {
@@ -63,6 +69,10 @@ export function getCategoryColor(categoryName: string, isExpense: boolean = true
       return '#ef4444'; // rose/red
     case 'Зарплата':
       return '#059669'; // teal/emerald
+    case 'Проценты по вкладу':
+      return '#6366f1'; // indigo
+    case 'Вклад и накопления':
+      return '#6366f1'; // indigo
     case 'Премия':
       return '#d97706'; // amber
     case 'Подработка':

@@ -17,7 +17,7 @@ export default defineConfig(() => {
           id: '/',
           name: 'Семейный кошелёк',
           short_name: 'Кошелёк',
-          description: 'Удобный учет семейных доходов и расходов с бюджетом и уведомлениями',
+          description: 'Удобный учет доходов и расходов с фильтрацией по месяцам, расчетом процентов по вкладам, бюджетами и категориями.',
           theme_color: '#4f46e5',
           background_color: '#f8fafc',
           display: 'standalone',

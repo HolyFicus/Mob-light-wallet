@@ -1,4 +1,5 @@
 import express from 'express';
+import http from 'http';
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -30,8 +31,10 @@ function generateLocalAnalysis(financialContext: any, prompt: string): string {
     return 'Данные о доходах и расходах пока отсутствуют. Добавьте первые операции для получения аналитики!';
   }
 
-  const { totalIncome, totalExpense, balance, categoryAnalysis, memberSpending, regularPayments } = financialContext;
+  const { totalIncome, totalExpense, balance, categoryAnalysis, regularPayments, deposits } = financialContext;
   const savingsRate = totalIncome > 0 ? Math.round(((totalIncome - totalExpense) / totalIncome) * 100) : 0;
+  const depositsSum = (deposits || []).reduce((s: number, d: any) => s + (d.amount || 0), 0);
+  const monthlyInterestSum = (deposits || []).reduce((s: number, d: any) => s + (d.monthlyInterest || 0), 0);
 
   const overBudgetCats: string[] = [];
   const nearBudgetCats: string[] = [];
@@ -46,30 +49,19 @@ function generateLocalAnalysis(financialContext: any, prompt: string): string {
     });
   }
 
-  let topSpender = '';
-  let maxSpend = 0;
-  if (memberSpending) {
-    Object.entries(memberSpending).forEach(([member, data]: [string, any]) => {
-      if (data.expense > maxSpend) {
-        maxSpend = data.expense;
-        topSpender = member;
-      }
-    });
-  }
-
   return `### 📊 Анализ семейного кошелька
 
 **Финансовый итог месяца:**
 • **Доходы:** +${(totalIncome || 0).toLocaleString('ru-RU')} ₽
 • **Расходы:** -${(totalExpense || 0).toLocaleString('ru-RU')} ₽
 • **Текущий баланс:** ${(balance || 0).toLocaleString('ru-RU')} ₽ (норма сбережений: **${savingsRate}%**)
+${depositsSum > 0 ? `• **Вклады и накопления:** ${depositsSum.toLocaleString('ru-RU')} ₽ (пассивный доход: +${monthlyInterestSum.toLocaleString('ru-RU')} ₽ / мес)\n` : ''}
 
 ${overBudgetCats.length > 0 ? `**⚠️ Превышение лимитов:**\n${overBudgetCats.join('\n')}\n` : '✅ **Бюджет под контролем:** ни по одной категории лимит не превышен.\n'}
 ${nearBudgetCats.length > 0 ? `**Внимание к категориям (близко к лимиту):**\n${nearBudgetCats.join('\n')}\n` : ''}
-${topSpender ? `**Члены семьи:** Основная доля расходов у **${topSpender}** (${maxSpend.toLocaleString('ru-RU')} ₽).` : ''}
 
 **💡 Рекомендация:**
-Сохраняйте темп сбережений не менее 15-20% от совокупного дохода. Проверьте предстоящие регулярные платежи, чтобы избежать кассовых разрывов к концу месяца.`;
+Сохраняйте темп сбережений не менее 15-20% от совокупного дохода. Регулярные пополнения вкладов и контроль лимитов обеспечат финансовую стабильность семьи.`;
 }
 
 // API endpoint for AI Financial Assistant
@@ -103,8 +95,8 @@ app.post('/api/ai-advisor', async (req, res) => {
 - Текущий баланс: ${financialContext.balance} ₽
 - Лимиты бюджетов и факт расходов по категориям:
 ${JSON.stringify(financialContext.categoryAnalysis || {}, null, 2)}
-- Расходы по членам семьи:
-${JSON.stringify(financialContext.memberSpending || {}, null, 2)}
+- Вклады и накопительные счета:
+${JSON.stringify(financialContext.deposits || [], null, 2)}
 - Регулярные платежи семьи:
 ${JSON.stringify(financialContext.regularPayments || [], null, 2)}
 - Последние операции:
@@ -141,6 +133,7 @@ ${JSON.stringify(financialContext.recentTransactions || [], null, 2)}`
 // Setup Vite middleware for SPA
 async function startServer() {
   const isProd = process.env.NODE_ENV === 'production';
+  const httpServer = http.createServer(app);
 
   if (!isProd) {
     const vite = await createViteServer({
@@ -148,6 +141,9 @@ async function startServer() {
         middlewareMode: true,
         host: '0.0.0.0',
         port: PORT,
+        hmr: {
+          server: httpServer,
+        },
       },
       appType: 'spa',
     });
@@ -159,7 +155,7 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
+  httpServer.listen(PORT, '0.0.0.0', () => {
     console.log(`Server running at http://0.0.0.0:${PORT}`);
   });
 }

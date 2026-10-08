@@ -100,3 +100,23 @@ export function getDaysInMonth(yearMonth: string): number {
   const month = parseInt(monthStr, 10);
   return new Date(year, month, 0).getDate();
 }
+
+/**
+ * Returns correct Russian plural form for a given number.
+ * e.g. pluralizeRu(count, 'операция', 'операции', 'операций')
+ * e.g. pluralizeRu(count, 'неделя', 'недели', 'недель')
+ * e.g. pluralizeRu(count, 'вклад', 'вклада', 'вкладов')
+ */
+export function pluralizeRu(
+  n: number,
+  one: string,
+  few: string,
+  many: string
+): string {
+  const abs = Math.abs(Math.round(n)) % 100;
+  const rem = abs % 10;
+  if (abs > 10 && abs < 20) return many;
+  if (rem > 1 && rem < 5) return few;
+  if (rem === 1) return one;
+  return many;
+}

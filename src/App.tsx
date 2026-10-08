@@ -1,10 +1,23 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Plus, Sparkles, AlertTriangle, ShieldCheck, Download } from 'lucide-react';
+import {
+  Plus,
+  Sparkles,
+  ShieldCheck,
+  Download,
+  Landmark,
+  PiggyBank,
+  ArrowUpRight,
+  FileSpreadsheet,
+  CheckCircle2,
+  AlertCircle,
+  Info,
+} from 'lucide-react';
 import {
   CategoryBudgets,
   RegularPayment,
   Transaction,
   TransactionType,
+  Deposit,
 } from './types';
 import {
   DEFAULT_EXPENSE_CATEGORIES,
@@ -13,35 +26,38 @@ import {
 import {
   getCurrentYearMonth,
   getDaysInMonth,
+  formatCurrency,
+  pluralizeRu,
 } from './utils/formatters';
 import {
   loadTransactions,
   saveTransactions,
-  loadMembers,
-  saveMembers,
   loadBudgets,
   saveBudgets,
   loadRegularPayments,
   saveRegularPayments,
-  loadDismissedNotifications,
-  saveDismissedNotifications,
+  loadDeposits,
+  saveDeposits,
   resetAllToDefaults,
   clearAllData,
 } from './utils/storage';
-import { generateActiveNotifications } from './utils/notifications';
+import {
+  calculateTotalDeposits,
+  calculateTotalMonthlyInterest,
+} from './utils/depositCalculations';
+import { exportTransactionsToCsv } from './utils/exportCsv';
 
 import { Header } from './components/Header';
 import { SummaryCards } from './components/SummaryCards';
 import { BudgetProgressPanel } from './components/BudgetProgressPanel';
 import { TransactionList } from './components/TransactionList';
-import { FamilyMembersSummary } from './components/FamilyMembersSummary';
 import { TransactionModal } from './components/TransactionModal';
 import { BudgetModal } from './components/BudgetModal';
 import { RegularPaymentsModal } from './components/RegularPaymentsModal';
-import { ManageMembersModal } from './components/ManageMembersModal';
 import { AiAssistantModal } from './components/AiAssistantModal';
 import { AuthorBadge } from './components/AuthorBadge';
 import { InstallAppModal } from './components/InstallAppModal';
+import { DepositsModal } from './components/DepositsModal';
 import { usePWAInstall } from './hooks/usePWAInstall';
 
 export default function App() {
@@ -50,19 +66,28 @@ export default function App() {
 
   // Persistent States
   const [transactions, setTransactions] = useState<Transaction[]>(() => loadTransactions());
-  const [members, setMembers] = useState<string[]>(() => loadMembers());
   const [budgets, setBudgets] = useState<CategoryBudgets>(() => loadBudgets());
   const [regularPayments, setRegularPayments] = useState<RegularPayment[]>(() => loadRegularPayments());
-  const [dismissedNotifIds, setDismissedNotifIds] = useState<string[]>(() => loadDismissedNotifications());
+  const [deposits, setDeposits] = useState<Deposit[]>(() => loadDeposits());
 
   // Modals visibility
   const [isTxModalOpen, setIsTxModalOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [isBudgetModalOpen, setIsBudgetModalOpen] = useState(false);
-  const [isMembersModalOpen, setIsMembersModalOpen] = useState(false);
   const [isRegularPaymentsModalOpen, setIsRegularPaymentsModalOpen] = useState(false);
+  const [isDepositsModalOpen, setIsDepositsModalOpen] = useState(false);
   const [isAiAssistantModalOpen, setIsAiAssistantModalOpen] = useState(false);
   const [isInstallModalOpen, setIsInstallModalOpen] = useState(false);
+
+  // In-app Toast message (replaces window.alert)
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+
+  const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
+    setToast({ message, type });
+    setTimeout(() => {
+      setToast(null);
+    }, 3500);
+  };
 
   // PWA Install capability
   const { isInstallable, isInstalled, isIOS, install } = usePWAInstall();
@@ -72,8 +97,8 @@ export default function App() {
     type?: TransactionType;
     amount?: number;
     category?: string;
-    member?: string;
     comment?: string;
+    date?: string;
   }>({});
 
   // Sync states to localStorage
@@ -82,20 +107,12 @@ export default function App() {
   }, [transactions]);
 
   useEffect(() => {
-    saveMembers(members);
-  }, [members]);
-
-  useEffect(() => {
     saveBudgets(budgets);
   }, [budgets]);
 
   useEffect(() => {
     saveRegularPayments(regularPayments);
   }, [regularPayments]);
-
-  useEffect(() => {
-    saveDismissedNotifications(dismissedNotifIds);
-  }, [dismissedNotifIds]);
 
   // Combined categories list
   const allCategories = useMemo(() => {
@@ -133,17 +150,6 @@ export default function App() {
     };
   }, [monthTransactions, currentYearMonth]);
 
-  // Active notifications for budgets and bills
-  const activeNotifications = useMemo(() => {
-    return generateActiveNotifications({
-      yearMonth: currentYearMonth,
-      transactions,
-      budgets,
-      regularPayments,
-      dismissedNotificationIds: dismissedNotifIds,
-    });
-  }, [currentYearMonth, transactions, budgets, regularPayments, dismissedNotifIds]);
-
   // Handlers for transactions
   const handleSaveTransaction = (
     txData: Omit<Transaction, 'id' | 'createdAt'>,
@@ -173,16 +179,14 @@ export default function App() {
     setIsTxModalOpen(true);
   };
 
-  const handleOpenAdd = (type: TransactionType = 'expense') => {
+  const handleOpenAdd = (
+    type: TransactionType = 'expense',
+    category?: string,
+    date?: string
+  ) => {
     setEditingTransaction(null);
-    setTxInitialData({ type });
+    setTxInitialData({ type, category, date });
     setIsTxModalOpen(true);
-  };
-
-  const handleAddNewMember = (name: string) => {
-    if (!members.includes(name)) {
-      setMembers((prev) => [...prev, name]);
-    }
   };
 
   // Quick Pay regular bill handler
@@ -192,29 +196,87 @@ export default function App() {
       type: 'expense',
       amount: bill.amount,
       category: bill.category,
-      member: bill.member,
       comment: bill.title,
     });
     setIsTxModalOpen(true);
   };
 
-  // Notification dismiss handlers
-  const handleDismissNotification = (id: string) => {
-    setDismissedNotifIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
+  // Deposit Handlers
+  const handleSaveDeposits = (newDeposits: Deposit[]) => {
+    setDeposits(newDeposits);
+    saveDeposits(newDeposits);
   };
 
-  const handleDismissAllNotifications = () => {
-    const ids = activeNotifications.map((n) => n.id);
-    setDismissedNotifIds((prev) => Array.from(new Set([...prev, ...ids])));
+  const handleDepositInterestToWallet = (deposit: Deposit, interestAmount: number) => {
+    const today = new Date().toISOString().split('T')[0];
+    const newTx: Transaction = {
+      id: `tx-interest-${Date.now()}`,
+      type: 'income',
+      amount: interestAmount,
+      category: 'Проценты по вкладу',
+      date: today,
+      comment: `Проценты по вкладу «${deposit.name}» (${deposit.interestRate}% годовых)`,
+      createdAt: Date.now(),
+    };
+    const updated = [newTx, ...transactions];
+    setTransactions(updated);
+    saveTransactions(updated);
   };
+
+  const handleTopUpFromWallet = (deposit: Deposit, topUpAmount: number) => {
+    const today = new Date().toISOString().split('T')[0];
+    const newTx: Transaction = {
+      id: `tx-dep-topup-${Date.now()}`,
+      type: 'expense',
+      amount: topUpAmount,
+      category: 'Вклад и накопления',
+      date: today,
+      comment: `Пополнение вклада «${deposit.name}»`,
+      createdAt: Date.now(),
+    };
+    const updated = [newTx, ...transactions];
+    setTransactions(updated);
+    saveTransactions(updated);
+  };
+
+  const handleWithdrawFromDepositToWallet = (deposit: Deposit, withdrawAmount: number) => {
+    const today = new Date().toISOString().split('T')[0];
+    const newTx: Transaction = {
+      id: `tx-dep-withdraw-${Date.now()}`,
+      type: 'income',
+      amount: withdrawAmount,
+      category: 'Вклад и накопления',
+      date: today,
+      comment: `Снятие с вклада «${deposit.name}» в кошелёк`,
+      createdAt: Date.now(),
+    };
+    const updated = [newTx, ...transactions];
+    setTransactions(updated);
+    saveTransactions(updated);
+  };
+
+  const totalDeposits = useMemo(() => calculateTotalDeposits(deposits), [deposits]);
+  const totalMonthlyInterest = useMemo(() => calculateTotalMonthlyInterest(deposits), [deposits]);
 
   // Export / Import
+  const handleExportCSV = () => {
+    if (transactions.length === 0) {
+      showToast('В кошельке пока нет операций для экспорта', 'info');
+      return;
+    }
+    exportTransactionsToCsv(transactions);
+    showToast(
+      `Экспортировано ${transactions.length} ${pluralizeRu(transactions.length, 'операция', 'операции', 'операций')} в CSV`,
+      'success'
+    );
+  };
+
   const handleExportData = () => {
     const exportObject = {
       transactions,
-      members,
       budgets,
       regularPayments,
+      deposits,
       exportedAt: new Date().toISOString(),
     };
     const blob = new Blob([JSON.stringify(exportObject, null, 2)], {
@@ -226,6 +288,7 @@ export default function App() {
     link.download = `family_wallet_backup_${currentYearMonth}.json`;
     link.click();
     URL.revokeObjectURL(url);
+    showToast('Резервная копия сохранена', 'success');
   };
 
   const handleImportData = (file: File) => {
@@ -237,18 +300,19 @@ export default function App() {
         if (Array.isArray(parsed.transactions)) {
           setTransactions(parsed.transactions);
         }
-        if (Array.isArray(parsed.members)) {
-          setMembers(parsed.members);
-        }
         if (parsed.budgets && typeof parsed.budgets === 'object') {
           setBudgets(parsed.budgets);
         }
         if (Array.isArray(parsed.regularPayments)) {
           setRegularPayments(parsed.regularPayments);
         }
-        alert('Данные успешно импортированы!');
+        if (Array.isArray(parsed.deposits)) {
+          setDeposits(parsed.deposits);
+          saveDeposits(parsed.deposits);
+        }
+        showToast('Данные успешно импортированы!', 'success');
       } catch (err) {
-        alert('Ошибка при чтении файла JSON. Убедитесь в корректности формата.');
+        showToast('Ошибка при чтении файла JSON. Проверьте формат файла.', 'error');
       }
     };
     reader.readAsText(file);
@@ -257,10 +321,10 @@ export default function App() {
   const handleResetData = () => {
     resetAllToDefaults();
     setTransactions(loadTransactions());
-    setMembers(loadMembers());
     setBudgets(loadBudgets());
     setRegularPayments(loadRegularPayments());
-    setDismissedNotifIds([]);
+    setDeposits(loadDeposits());
+    showToast('Данные сброшены к начальным значениям', 'info');
   };
 
   const handleClearData = () => {
@@ -268,13 +332,9 @@ export default function App() {
     setTransactions([]);
     setBudgets({});
     setRegularPayments([]);
-    setDismissedNotifIds([]);
+    setDeposits([]);
+    showToast('Все данные кошелька успешно очищены', 'success');
   };
-
-  // Top high-priority notification banner (if budget exceeded or bill overdue)
-  const urgentNotification = activeNotifications.find(
-    (n) => n.type === 'budget_exceeded' || n.type === 'bill_overdue' || n.type === 'bill_today'
-  );
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col font-sans">
@@ -284,16 +344,14 @@ export default function App() {
         onMonthChange={setCurrentYearMonth}
         onOpenAddModal={() => handleOpenAdd('expense')}
         onOpenBudgetModal={() => setIsBudgetModalOpen(true)}
-        onOpenMembersModal={() => setIsMembersModalOpen(true)}
         onOpenRegularPaymentsModal={() => setIsRegularPaymentsModalOpen(true)}
+        onOpenDepositsModal={() => setIsDepositsModalOpen(true)}
         onOpenAiAssistantModal={() => setIsAiAssistantModalOpen(true)}
         onOpenInstallModal={() => setIsInstallModalOpen(true)}
         isAppInstalled={isInstalled}
-        notifications={activeNotifications}
-        onDismissNotification={handleDismissNotification}
-        onDismissAllNotifications={handleDismissAllNotifications}
         onPayBillQuick={handlePayBillQuick}
         onExportData={handleExportData}
+        onExportCSV={handleExportCSV}
         onImportData={handleImportData}
         onResetData={handleResetData}
         onClearData={handleClearData}
@@ -301,49 +359,16 @@ export default function App() {
 
       {/* Main Container */}
       <main className="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 py-5 sm:py-6 space-y-6">
-        {/* Urgent Notification Banner */}
-        {urgentNotification && (
-          <div className="p-3.5 bg-rose-50 border border-rose-200/80 rounded-2xl flex items-center justify-between gap-3 text-xs shadow-2xs animate-in fade-in duration-150">
-            <div className="flex items-center gap-2.5 min-w-0">
-              <div className="w-7 h-7 rounded-lg bg-rose-100 text-rose-600 flex items-center justify-center shrink-0">
-                <AlertTriangle className="w-4 h-4" />
-              </div>
-              <div className="min-w-0">
-                <span className="font-bold text-slate-900 mr-1.5">
-                  {urgentNotification.title}:
-                </span>
-                <span className="text-slate-700 truncate">
-                  {urgentNotification.message}
-                </span>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2 shrink-0">
-              {urgentNotification.actionData && (
-                <button
-                  onClick={() => handlePayBillQuick(urgentNotification.actionData)}
-                  className="px-2.5 py-1 bg-rose-600 hover:bg-rose-700 text-white font-semibold rounded-lg text-[11px] shadow-2xs transition-colors"
-                >
-                  Оплатить
-                </button>
-              )}
-              <button
-                onClick={() => handleDismissNotification(urgentNotification.id)}
-                className="text-slate-400 hover:text-slate-700 font-medium text-[11px] px-1.5 py-1"
-              >
-                Скрыть
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Summary Metric Cards (Итоги: Доходы, Расходы, Баланс) */}
+        {/* Summary Metric Cards (Итоги: Доходы, Расходы, Баланс, Вклады) */}
         <SummaryCards
           totalIncome={monthlyStats.totalIncome}
           totalExpense={monthlyStats.totalExpense}
           balance={monthlyStats.balance}
           transactionCount={monthlyStats.transactionCount}
           avgExpensePerDay={monthlyStats.avgExpensePerDay}
+          totalDeposits={totalDeposits}
+          totalMonthlyInterest={totalMonthlyInterest}
+          onOpenDepositsModal={() => setIsDepositsModalOpen(true)}
         />
 
         {/* Core Layout: Operations List on Left, Budget & Member Progress on Right */}
@@ -361,6 +386,16 @@ export default function App() {
               </div>
 
               <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleExportCSV}
+                  className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 text-xs font-semibold text-slate-700 hover:text-slate-900 bg-white hover:bg-slate-100 border border-slate-200 rounded-xl transition-all shadow-2xs cursor-pointer"
+                  title="Экспортировать все операции в CSV для Excel или Google Таблиц"
+                >
+                  <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                  <span className="hidden sm:inline">Экспорт в CSV</span>
+                  <span className="sm:hidden">CSV</span>
+                </button>
                 <button
                   onClick={() => handleOpenAdd('income')}
                   className="hidden sm:inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-xl transition-colors"
@@ -381,14 +416,16 @@ export default function App() {
             <TransactionList
               transactions={monthTransactions}
               categories={allCategories}
-              members={members}
+              currentYearMonth={currentYearMonth}
               onEdit={handleEditTransaction}
               onDelete={handleDeleteTransaction}
-              onOpenAddModal={() => handleOpenAdd('expense')}
+              onOpenAddModal={(initialDate?: string) =>
+                handleOpenAdd('expense', undefined, initialDate)
+              }
             />
           </div>
 
-          {/* Right Sidebar: Category Budgets Progress & Family Members Breakdown (5 cols on desktop) */}
+          {/* Right Sidebar: Category Budgets & Deposits (5 cols on desktop) */}
           <div className="lg:col-span-5 space-y-5">
             {/* Category Budget Progress Panel */}
             <BudgetProgressPanel
@@ -399,12 +436,96 @@ export default function App() {
               onOpenBudgetModal={() => setIsBudgetModalOpen(true)}
             />
 
-            {/* Spending Breakdown by Family Member */}
-            <FamilyMembersSummary
-              transactions={monthTransactions}
-              members={members}
-              yearMonth={currentYearMonth}
-            />
+            {/* Deposits and Passive Income Widget */}
+            <div className="bg-white rounded-2xl border border-slate-200/90 shadow-2xs p-5 space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                    <Landmark className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-900 leading-tight">
+                      Вклады и проценты
+                    </h3>
+                    <p className="text-[11px] text-slate-500">
+                      Сбережения и пассивный доход
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setIsDepositsModalOpen(true)}
+                  className="text-xs font-bold text-indigo-600 hover:text-indigo-700 bg-indigo-50 hover:bg-indigo-100/80 px-2.5 py-1.5 rounded-lg transition-colors cursor-pointer"
+                >
+                  {deposits.length > 0 ? 'Управление' : '+ Добавить'}
+                </button>
+              </div>
+
+              {/* Total Balance & Monthly Return */}
+              <div className="grid grid-cols-2 gap-2.5 bg-slate-50/80 p-3 rounded-xl border border-slate-100">
+                <div>
+                  <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">
+                    Сумма вкладов
+                  </span>
+                  <span className="text-sm sm:text-base font-extrabold text-slate-900 block mt-0.5">
+                    {formatCurrency(totalDeposits)}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-[10px] uppercase font-bold text-emerald-600 block tracking-wider">
+                    Доход в месяц
+                  </span>
+                  <span className="text-sm sm:text-base font-extrabold text-emerald-600 block mt-0.5">
+                    +{formatCurrency(totalMonthlyInterest)}
+                  </span>
+                </div>
+              </div>
+
+              {/* Deposit Items Preview */}
+              {deposits.length > 0 ? (
+                <div className="space-y-2">
+                  {deposits.slice(0, 3).map((dep) => (
+                    <div
+                      key={dep.id}
+                      onClick={() => setIsDepositsModalOpen(true)}
+                      className="flex items-center justify-between p-2.5 rounded-xl border border-slate-100 hover:border-indigo-200 hover:bg-indigo-50/20 transition-all cursor-pointer group text-xs"
+                    >
+                      <div className="min-w-0 pr-2">
+                        <span className="font-semibold text-slate-800 block truncate group-hover:text-indigo-600">
+                          {dep.name}
+                        </span>
+                        <span className="text-[11px] text-slate-500">
+                          {formatCurrency(dep.amount)} • {dep.interestRate}% годовых
+                        </span>
+                      </div>
+                      <span className="text-xs font-bold text-emerald-600 shrink-0">
+                        +{formatCurrency(Math.round((dep.amount * (dep.interestRate / 100)) / 12))}/мес
+                      </span>
+                    </div>
+                  ))}
+                  {deposits.length > 3 && (
+                    <button
+                      onClick={() => setIsDepositsModalOpen(true)}
+                      className="w-full text-center text-xs text-indigo-600 hover:text-indigo-700 font-medium py-1"
+                    >
+                      Ещё {deposits.length - 3} {pluralizeRu(deposits.length - 3, 'вклад', 'вклада', 'вкладов')}...
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <div className="text-center py-3 px-2 border border-dashed border-slate-200 rounded-xl">
+                  <p className="text-xs text-slate-500 mb-2">
+                    Добавьте вклад или накопительный счет, чтобы рассчитывать проценты как доход.
+                  </p>
+                  <button
+                    onClick={() => setIsDepositsModalOpen(true)}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Рассчитать и открыть вклад</span>
+                  </button>
+                </div>
+              )}
+            </div>
 
             {/* AI Assistant Promo Banner */}
             <div className="p-4 rounded-2xl bg-linear-to-br from-indigo-50/80 via-purple-50/40 to-white border border-indigo-100 shadow-2xs flex items-center justify-between gap-3">
@@ -414,7 +535,7 @@ export default function App() {
                 </div>
                 <div>
                   <h4 className="text-xs font-bold text-slate-900">
-                    Советник по семейному бюджету
+                    Советник по финансам
                   </h4>
                   <p className="text-[11px] text-slate-500 mt-0.5">
                     ИИ проанализирует ваши расходы и подскажет идеи экономии
@@ -478,6 +599,15 @@ export default function App() {
         isIOS={isIOS}
         onInstall={install}
       />
+      <DepositsModal
+        isOpen={isDepositsModalOpen}
+        onClose={() => setIsDepositsModalOpen(false)}
+        deposits={deposits}
+        onSaveDeposits={handleSaveDeposits}
+        onDepositInterestToWallet={handleDepositInterestToWallet}
+        onTopUpFromWallet={handleTopUpFromWallet}
+        onWithdrawFromWallet={handleWithdrawFromDepositToWallet}
+      />
       <TransactionModal
         isOpen={isTxModalOpen}
         onClose={() => {
@@ -486,15 +616,13 @@ export default function App() {
           setTxInitialData({});
         }}
         categories={allCategories}
-        members={members}
         onSave={handleSaveTransaction}
         editingTransaction={editingTransaction}
-        onAddNewMember={handleAddNewMember}
         initialType={txInitialData.type}
         initialAmount={txInitialData.amount}
         initialCategory={txInitialData.category}
-        initialMember={txInitialData.member}
         initialComment={txInitialData.comment}
+        initialDate={txInitialData.date}
       />
 
       <BudgetModal
@@ -509,17 +637,9 @@ export default function App() {
         isOpen={isRegularPaymentsModalOpen}
         onClose={() => setIsRegularPaymentsModalOpen(false)}
         payments={regularPayments}
-        members={members}
         categories={DEFAULT_EXPENSE_CATEGORIES}
         onSavePayments={setRegularPayments}
         onPayNow={handlePayBillQuick}
-      />
-
-      <ManageMembersModal
-        isOpen={isMembersModalOpen}
-        onClose={() => setIsMembersModalOpen(false)}
-        members={members}
-        onSaveMembers={setMembers}
       />
 
       <AiAssistantModal
@@ -529,8 +649,32 @@ export default function App() {
         transactions={transactions}
         budgets={budgets}
         regularPayments={regularPayments}
-        members={members}
+        deposits={deposits}
       />
+
+      {/* Floating Toast Notification */}
+      {toast && (
+        <div className="fixed top-20 right-4 sm:right-6 z-50 animate-in fade-in slide-in-from-top-2 duration-150">
+          <div
+            className={`flex items-center gap-2.5 px-4 py-3 rounded-2xl shadow-xl border text-xs font-semibold backdrop-blur-md ${
+              toast.type === 'success'
+                ? 'bg-emerald-50/95 border-emerald-200 text-emerald-900'
+                : toast.type === 'error'
+                ? 'bg-rose-50/95 border-rose-200 text-rose-900'
+                : 'bg-indigo-50/95 border-indigo-200 text-indigo-900'
+            }`}
+          >
+            {toast.type === 'success' ? (
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            ) : toast.type === 'error' ? (
+              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+            ) : (
+              <Info className="w-4 h-4 text-indigo-600 shrink-0" />
+            )}
+            <span>{toast.message}</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -7,7 +7,6 @@ export interface Transaction {
   category: string;
   date: string; // YYYY-MM-DD
   comment: string;
-  member: string; // Family member name
   createdAt: number;
 }
 
@@ -39,24 +38,19 @@ export interface RegularPayment {
   amount: number;
   dayOfMonth: number; // 1-31
   category: string;
-  member: string;
   autoPayNoticeDays: number; // days before to alert (default 3)
 }
 
-export type NotificationType = 'budget_exceeded' | 'budget_warning' | 'bill_due' | 'bill_today' | 'bill_overdue' | 'info';
-
-export interface AppNotification {
+export interface Deposit {
   id: string;
-  type: NotificationType;
-  title: string;
-  message: string;
-  date: string; // ISO string or YYYY-MM-DD
-  read: boolean;
-  category?: string;
-  billId?: string;
-  severity: 'warning' | 'danger' | 'info';
-  actionLabel?: string;
-  actionData?: any;
+  name: string; // e.g. "Вклад Т-Банк", "Накопительный счет Сбер"
+  bankName?: string;
+  amount: number; // Current principal deposit sum
+  interestRate: number; // Annual interest percentage (e.g. 18.5)
+  interestPayout: 'wallet' | 'capitalization'; // 'wallet' (выплата в доход) | 'capitalization' (прибавлять к вкладу)
+  dayOfMonth: number; // Day of month when interest is paid (1-31)
+  notes?: string;
+  createdAt: number;
 }
 
 export interface MonthlyStats {

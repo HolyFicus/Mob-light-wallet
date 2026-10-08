@@ -7,7 +7,6 @@ import {
   CheckCircle,
   AlertCircle,
   Check,
-  User,
 } from 'lucide-react';
 import { CategoryItem, RegularPayment } from '../types';
 import { formatCurrency } from '../utils/formatters';
@@ -17,7 +16,6 @@ interface RegularPaymentsModalProps {
   isOpen: boolean;
   onClose: () => void;
   payments: RegularPayment[];
-  members: string[];
   categories: CategoryItem[];
   onSavePayments: (payments: RegularPayment[]) => void;
   onPayNow: (payment: RegularPayment) => void;
@@ -27,7 +25,6 @@ export const RegularPaymentsModal: React.FC<RegularPaymentsModalProps> = ({
   isOpen,
   onClose,
   payments,
-  members,
   categories,
   onSavePayments,
   onPayNow,
@@ -37,7 +34,6 @@ export const RegularPaymentsModal: React.FC<RegularPaymentsModalProps> = ({
   const [newAmount, setNewAmount] = useState('');
   const [newDay, setNewDay] = useState('10');
   const [newCategory, setNewCategory] = useState(categories[0]?.name || 'Жильё');
-  const [newMember, setNewMember] = useState(members[0] || 'Папа');
   const [newNoticeDays, setNewNoticeDays] = useState('3');
 
   if (!isOpen) return null;
@@ -58,7 +54,6 @@ export const RegularPaymentsModal: React.FC<RegularPaymentsModalProps> = ({
       amount: amountNum,
       dayOfMonth: Math.max(1, Math.min(31, dayNum)),
       category: newCategory,
-      member: newMember,
       autoPayNoticeDays: noticeNum,
     };
 
@@ -139,8 +134,6 @@ export const RegularPaymentsModal: React.FC<RegularPaymentsModalProps> = ({
                           <span>{p.dayOfMonth}-е число</span>
                           <span>·</span>
                           <span>{p.category}</span>
-                          <span>·</span>
-                          <span>{p.member}</span>
                         </div>
                       </div>
                     </div>
@@ -216,7 +209,7 @@ export const RegularPaymentsModal: React.FC<RegularPaymentsModalProps> = ({
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-[11px] font-semibold text-slate-600 mb-1">
                     День месяца (1-31)
@@ -248,23 +241,6 @@ export const RegularPaymentsModal: React.FC<RegularPaymentsModalProps> = ({
                           {c.name}
                         </option>
                       ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">
-                    Член семьи
-                  </label>
-                  <select
-                    value={newMember}
-                    onChange={(e) => setNewMember(e.target.value)}
-                    className="w-full text-xs px-3 py-2 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                  >
-                    {members.map((m) => (
-                      <option key={m} value={m}>
-                        {m}
-                      </option>
-                    ))}
                   </select>
                 </div>
               </div>

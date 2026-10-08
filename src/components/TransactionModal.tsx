@@ -18,39 +18,32 @@ interface TransactionModalProps {
   isOpen: boolean;
   onClose: () => void;
   categories: CategoryItem[];
-  members: string[];
   onSave: (tx: Omit<Transaction, 'id' | 'createdAt'>, existingId?: string) => void;
   editingTransaction?: Transaction | null;
-  onAddNewMember: (name: string) => void;
   initialType?: TransactionType;
   initialCategory?: string;
   initialAmount?: number;
-  initialMember?: string;
   initialComment?: string;
+  initialDate?: string;
 }
 
 export const TransactionModal: React.FC<TransactionModalProps> = ({
   isOpen,
   onClose,
   categories,
-  members,
   onSave,
   editingTransaction,
-  onAddNewMember,
   initialType = 'expense',
   initialCategory,
   initialAmount,
-  initialMember,
   initialComment,
+  initialDate,
 }) => {
   const [type, setType] = useState<TransactionType>(initialType);
   const [amount, setAmount] = useState<string>('');
   const [category, setCategory] = useState<string>('');
-  const [date, setDate] = useState<string>(getTodayDateString());
+  const [date, setDate] = useState<string>(initialDate || getTodayDateString());
   const [comment, setComment] = useState<string>('');
-  const [member, setMember] = useState<string>('');
-  const [isAddingMember, setIsAddingMember] = useState(false);
-  const [newMemberName, setNewMemberName] = useState('');
   const [error, setError] = useState<string | null>(null);
 
   // Initialize form state when opened or editing
@@ -61,13 +54,11 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
       setCategory(editingTransaction.category);
       setDate(editingTransaction.date);
       setComment(editingTransaction.comment || '');
-      setMember(editingTransaction.member);
     } else {
       setType(initialType);
       setAmount(initialAmount ? initialAmount.toString() : '');
-      setDate(getTodayDateString());
+      setDate(initialDate || getTodayDateString());
       setComment(initialComment || '');
-      setMember(initialMember || members[0] || 'Папа');
 
       const filteredCats = categories.filter((c) => c.type === initialType);
       if (initialCategory && filteredCats.some((c) => c.name === initialCategory)) {
@@ -77,7 +68,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
       }
     }
     setError(null);
-  }, [editingTransaction, isOpen, initialType, initialAmount, initialCategory, initialMember, initialComment, members, categories]);
+  }, [editingTransaction, isOpen, initialType, initialAmount, initialCategory, initialComment, initialDate, categories]);
 
   if (!isOpen) return null;
 
@@ -96,16 +87,6 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
     setAmount((current + value).toString());
   };
 
-  const handleCreateMember = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newMemberName.trim()) return;
-    const trimmed = newMemberName.trim();
-    onAddNewMember(trimmed);
-    setMember(trimmed);
-    setNewMemberName('');
-    setIsAddingMember(false);
-  };
-
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const cleanAmount = parseFloat(amount.replace(/\s/g, '').replace(',', '.'));
@@ -117,11 +98,6 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
 
     if (!category) {
       setError('Выберите категорию');
-      return;
-    }
-
-    if (!member) {
-      setError('Выберите члена семьи');
       return;
     }
 
@@ -137,11 +113,9 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
         category,
         date,
         comment: comment.trim(),
-        member,
       },
       editingTransaction?.id
     );
-
     onClose();
   };
 
@@ -289,65 +263,8 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
             </div>
           </div>
 
-          {/* Member & Date Selection */}
+          {/* Date & Comment Selection */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {/* Family Member */}
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label className="text-xs font-semibold text-slate-700 flex items-center gap-1">
-                  <User className="w-3.5 h-3.5 text-slate-400" />
-                  <span>Член семьи</span>
-                </label>
-                {!isAddingMember && (
-                  <button
-                    type="button"
-                    onClick={() => setIsAddingMember(true)}
-                    className="text-[11px] font-semibold text-indigo-600 hover:text-indigo-700"
-                  >
-                    + Добавить
-                  </button>
-                )}
-              </div>
-
-              {isAddingMember ? (
-                <div className="flex items-center gap-1.5">
-                  <input
-                    type="text"
-                    placeholder="Имя (напр. Бабушка)"
-                    value={newMemberName}
-                    onChange={(e) => setNewMemberName(e.target.value)}
-                    className="flex-1 text-xs px-2.5 py-2 border border-indigo-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                  />
-                  <button
-                    type="button"
-                    onClick={handleCreateMember}
-                    className="p-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-xs"
-                  >
-                    <Check className="w-3.5 h-3.5" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setIsAddingMember(false)}
-                    className="p-2 text-slate-400 hover:text-slate-600"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              ) : (
-                <select
-                  value={member}
-                  onChange={(e) => setMember(e.target.value)}
-                  className="w-full text-xs font-medium text-slate-800 px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                >
-                  {members.map((m) => (
-                    <option key={m} value={m}>
-                      {m}
-                    </option>
-                  ))}
-                </select>
-              )}
-            </div>
-
             {/* Date Input */}
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1.5 flex items-center gap-1">
@@ -362,21 +279,21 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                 className="w-full text-xs font-medium text-slate-800 px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
               />
             </div>
-          </div>
 
-          {/* Comment / Note */}
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1.5 flex items-center gap-1">
-              <MessageSquare className="w-3.5 h-3.5 text-slate-400" />
-              <span>Комментарий (необязательно)</span>
-            </label>
-            <input
-              type="text"
-              value={comment}
-              onChange={(e) => setComment(e.target.value)}
-              placeholder="Например: Супермаркет Перекресток, чек"
-              className="w-full text-xs text-slate-800 px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500 placeholder:text-slate-400"
-            />
+            {/* Comment / Note */}
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1.5 flex items-center gap-1">
+                <MessageSquare className="w-3.5 h-3.5 text-slate-400" />
+                <span>Комментарий (необязательно)</span>
+              </label>
+              <input
+                type="text"
+                value={comment}
+                onChange={(e) => setComment(e.target.value)}
+                placeholder="Например: Супермаркет, чек"
+                className="w-full text-xs text-slate-800 px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500 placeholder:text-slate-400"
+              />
+            </div>
           </div>
 
           {/* Error display */}

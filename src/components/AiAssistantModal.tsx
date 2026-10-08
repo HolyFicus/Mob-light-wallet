@@ -6,14 +6,14 @@ import {
   Loader2,
   Bot,
   User,
-  HelpCircle,
   TrendingDown,
-  Users,
+  Landmark,
   Lightbulb,
   AlertTriangle,
 } from 'lucide-react';
-import { CategoryBudgets, RegularPayment, Transaction } from '../types';
+import { CategoryBudgets, RegularPayment, Transaction, Deposit } from '../types';
 import { generateLocalFinancialAnalysis } from '../utils/aiAdvisor';
+import { calculateMonthlyInterest } from '../utils/depositCalculations';
 
 interface AiAssistantModalProps {
   isOpen: boolean;
@@ -22,7 +22,7 @@ interface AiAssistantModalProps {
   transactions: Transaction[];
   budgets: CategoryBudgets;
   regularPayments: RegularPayment[];
-  members: string[];
+  deposits?: Deposit[];
 }
 
 interface Message {
@@ -37,13 +37,13 @@ export const AiAssistantModal: React.FC<AiAssistantModalProps> = ({
   transactions,
   budgets,
   regularPayments,
-  members,
+  deposits = [],
 }) => {
   const [messages, setMessages] = useState<Message[]>([
     {
       role: 'assistant',
       content:
-        'Здравствуйте! Я ваш семейный финансовый ИИ-помощник. Я проанализировал данные вашего кошелька за выбранный месяц: доходы, расходы, категории и бюджетные лимиты. Задайте мне любой вопрос о семейных финансах или выберите одну из тем ниже!',
+        'Здравствуйте! Я ваш финансовый ИИ-помощник. Я проанализировал данные вашего кошелька за выбранный месяц: доходы, расходы, вклады, категории и бюджетные лимиты. Задайте мне любой вопрос о финансах или выберите одну из тем ниже!',
     },
   ]);
   const [inputValue, setInputValue] = useState('');
@@ -57,24 +57,13 @@ export const AiAssistantModal: React.FC<AiAssistantModalProps> = ({
   let totalIncome = 0;
   let totalExpense = 0;
   const categorySpending: Record<string, number> = {};
-  const memberSpending: Record<string, { expense: number; income: number }> = {};
-
-  members.forEach((m) => {
-    memberSpending[m] = { expense: 0, income: 0 };
-  });
 
   monthTransactions.forEach((tx) => {
     if (tx.type === 'expense') {
       totalExpense += tx.amount;
       categorySpending[tx.category] = (categorySpending[tx.category] || 0) + tx.amount;
-      if (memberSpending[tx.member]) {
-        memberSpending[tx.member].expense += tx.amount;
-      }
     } else {
       totalIncome += tx.amount;
-      if (memberSpending[tx.member]) {
-        memberSpending[tx.member].income += tx.amount;
-      }
     }
   });
 
@@ -96,21 +85,25 @@ export const AiAssistantModal: React.FC<AiAssistantModalProps> = ({
     totalExpense,
     balance: totalIncome - totalExpense,
     categoryAnalysis,
-    memberSpending,
     regularPayments: regularPayments.map((p) => ({
       title: p.title,
       amount: p.amount,
       dayOfMonth: p.dayOfMonth,
       category: p.category,
-      member: p.member,
     })),
     recentTransactions: monthTransactions.slice(0, 15).map((t) => ({
       type: t.type,
       amount: t.amount,
       category: t.category,
-      member: t.member,
       comment: t.comment,
       date: t.date,
+    })),
+    deposits: deposits.map((d) => ({
+      name: d.name,
+      amount: d.amount,
+      interestRate: d.interestRate,
+      monthlyInterest: calculateMonthlyInterest(d),
+      interestPayout: d.interestPayout,
     })),
   };
 
@@ -163,9 +156,9 @@ export const AiAssistantModal: React.FC<AiAssistantModalProps> = ({
       prompt: 'Посмотри на категории наших расходов и подскажи 3-4 конкретных способа оптимизировать семейный бюджет.',
     },
     {
-      label: 'Анализ трат по членам семьи',
-      icon: Users,
-      prompt: 'Проанализируй, кто из членов семьи сколько потратил и на какие категории. Дай краткий отчет.',
+      label: 'Вклады и пассивный доход',
+      icon: Landmark,
+      prompt: 'Проанализируй мои вклады, накопительные счета и ожидаемые проценты дохода. Как максимизировать пассивный доход?',
     },
     {
       label: 'Проверка лимитов и регулярных платежей',

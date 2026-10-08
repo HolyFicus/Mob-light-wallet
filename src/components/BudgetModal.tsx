@@ -125,8 +125,8 @@ export const BudgetModal: React.FC<BudgetModalProps> = ({
           <div className="flex items-start gap-2 pt-2 text-xs text-slate-500">
             <AlertCircle className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
             <span>
-              При приближении к лимиту (85%) или его превышении приложение отобразит уведомление в
-              колокольчике и на панели бюджета.
+              При приближении к лимиту (85%) или его превышении шкала категории на панели бюджета
+              подсветится предупреждающим цветом (желтым или красным).
             </span>
           </div>
 
